@@ -270,6 +270,29 @@ describe("assessment persistence API", () => {
     expect(body.error).toBe("bad_request");
   });
 
+  it("rejects_numeric_injection_and_null_numeric_values", async () => {
+    const sessionId = await createSessionId();
+
+    const response = await patchAssessment(
+      jsonRequest("PATCH", "/api/assessment", {
+        sessionId,
+        step: 2,
+        data: {
+          age: "32; DROP TABLE users;",
+          heightCm: null,
+          weightKg: "72kg",
+        },
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("bad_request");
+    expect(body.details.map((detail: { path: string }) => detail.path)).toEqual(
+      expect.arrayContaining(["data.age", "data.heightCm", "data.weightKg"]),
+    );
+  });
+
   it("rejects_invalid_extended_questionnaire_values", async () => {
     const sessionId = await createSessionId();
 

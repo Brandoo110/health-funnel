@@ -129,6 +129,17 @@ describe("calculateHealthResult", () => {
     );
   });
 
+  it("rejects_missing_runtime_health_fields", () => {
+    const withoutAge = { ...baseInput };
+    delete (withoutAge as Partial<HealthInput>).age;
+
+    const withoutHeight = { ...baseInput };
+    delete (withoutHeight as Partial<HealthInput>).heightCm;
+
+    expect(() => validateHealthInput(withoutAge as HealthInput)).toThrow("age");
+    expect(() => validateHealthInput(withoutHeight as HealthInput)).toThrow("heightCm");
+  });
+
   it("rejects_unreasonable_target_bmi", () => {
     expect(() =>
       validateHealthInput({
