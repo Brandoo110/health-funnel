@@ -84,7 +84,7 @@ p {
 }
 
 .app-card {
-  width: min(100%, 430px);
+  width: min(100%, 560px);
   align-self: center;
   border: 1px solid rgba(231, 223, 206, 0.96);
   border-radius: 22px;
@@ -94,7 +94,9 @@ p {
 
 .funnel-card,
 .setup-card,
-.results-card {
+.results-card,
+.lead-card,
+.generating-card {
   padding: 30px;
 }
 
@@ -104,7 +106,15 @@ p {
 }
 
 .results-card {
+  width: min(100%, 760px);
   align-self: flex-start;
+}
+
+.lead-card,
+.generating-card {
+  display: grid;
+  gap: 18px;
+  text-align: left;
 }
 
 .brand-row,
@@ -295,6 +305,35 @@ p {
   gap: 8px;
 }
 
+.text-field {
+  display: grid;
+  gap: 8px;
+}
+
+.text-field span {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.text-field input {
+  width: 100%;
+  min-height: 58px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 0 16px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 650;
+  outline: none;
+}
+
+.text-field input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(46, 74, 56, 0.12);
+}
+
 .number-input-wrap {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -302,6 +341,77 @@ p {
   border: 1px solid var(--line);
   border-radius: 15px;
   background: var(--white);
+}
+
+.loader-ring {
+  position: relative;
+  display: grid;
+  width: 112px;
+  height: 112px;
+  place-items: center;
+  border-radius: 50%;
+  margin: 4px auto 2px;
+  background:
+    conic-gradient(from 0deg, var(--green), var(--gold), var(--coral), var(--green)),
+    var(--selected);
+  animation: report-spin 900ms linear infinite;
+}
+
+.loader-ring::after {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: inherit;
+  background: var(--card);
+}
+
+.loader-ring span {
+  position: relative;
+  z-index: 1;
+  width: 38px;
+  height: 38px;
+  border-radius: inherit;
+  background: var(--green);
+  box-shadow: 0 0 0 10px rgba(46, 74, 56, 0.1);
+}
+
+.generation-steps,
+.lead-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.generation-steps span,
+.lead-summary span {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 11px 13px;
+  background: var(--white);
+  color: var(--green-dark);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.generation-steps span {
+  position: relative;
+  overflow: hidden;
+}
+
+.generation-steps span::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(233, 196, 106, 0.22), transparent);
+  transform: translateX(-100%);
+  animation: report-sweep 1.35s ease-in-out infinite;
+}
+
+.lead-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.lead-summary span {
+  text-align: center;
 }
 
 .number-input-wrap:focus-within {
@@ -725,6 +835,18 @@ p {
   min-width: 160px;
 }
 
+@keyframes report-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes report-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
 @media (max-width: 560px) {
   .page-frame {
     padding: 16px;
@@ -732,7 +854,9 @@ p {
 
   .funnel-card,
   .setup-card,
-  .results-card {
+  .results-card,
+  .lead-card,
+  .generating-card {
     padding: 22px;
   }
 
@@ -757,5 +881,9 @@ p {
   .price-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .lead-summary {
+    grid-template-columns: 1fr;
   }
 }

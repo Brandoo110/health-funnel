@@ -52,6 +52,12 @@ export const createSessionSchema = z
   .strict()
   .optional();
 
+export const updateSessionLeadSchema = z.object({
+  sessionId: sessionIdSchema,
+  name: z.string().trim().min(1).max(80),
+  email: z.string().trim().toLowerCase().email().max(254),
+});
+
 export const sessionRequestSchema = z.object({
   sessionId: sessionIdSchema,
 });

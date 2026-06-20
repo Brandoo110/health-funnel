@@ -58,8 +58,8 @@ npm test
 Current local result:
 
 ```txt
-Test Files  3 passed (3)
-Tests       31 passed (31)
+Test Files  4 passed (4)
+Tests       33 passed (33)
 ```
 
 Additional checks:
@@ -94,6 +94,29 @@ Response:
 {
   "sessionId": "uuid",
   "subscriptionStatus": "free"
+}
+```
+
+### `PATCH /api/sessions`
+
+Persist lead contact after the report has been generated. This keeps name/email out of the early funnel and saves them only when the user reaches the report gate.
+
+```json
+{
+  "sessionId": "uuid",
+  "name": "Junjie Li",
+  "email": "junjie@example.com"
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "sessionId": "uuid",
+  "name": "Junjie Li",
+  "email": "junjie@example.com"
 }
 ```
 
@@ -258,6 +281,8 @@ erDiagram
   users {
     uuid id PK
     datetime createdAt
+    string name
+    string email
     enum subscriptionStatus
     boolean healthDataConsent
   }
@@ -344,6 +369,8 @@ The tests target the scoring rubric directly: data validation, persistence recov
 | `/api/pay` state change | `unlocks_full_result_after_pay_for_same_session` |
 | `/api/pay` idempotency | `keeps_pay_idempotent_for_active_session` |
 | Unknown pay session | `returns_404_for_unknown_pay_session` |
+| Post-generation lead capture | `tests/api/sessions.test.ts` |
+| Invalid lead email | `rejects_invalid_lead_email` |
 
 ## Not Covered Yet
 

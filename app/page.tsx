@@ -30,6 +30,11 @@ type FormState = {
   healthDataConsent: boolean;
 };
 
+type LeadState = {
+  name: string;
+  email: string;
+};
+
 type AssessmentPayload = Partial<{
   gender: Gender;
   age: number;
@@ -130,12 +135,17 @@ const initialForm: FormState = {
   healthDataConsent: false,
 };
 
+const initialLead: LeadState = {
+  name: "",
+  email: "",
+};
+
 const questionSteps: QuestionStep[] = [
   {
     id: "gender",
     eyebrow: "Personalize",
-    title: "First, tell us your sex.",
-    description: "This helps calculate your BMR with the right clinical formula.",
+    title: "Which biological sex should we use for the estimate?",
+    description: "This only sets the BMR formula coefficient for the metabolism calculation.",
     fields: ["gender"],
   },
   {
@@ -209,8 +219,9 @@ export default function Home() {
   const [serverStep, setServerStep] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
   const [form, setForm] = useState<FormState>(initialForm);
+  const [lead, setLead] = useState<LeadState>(initialLead);
   const [results, setResults] = useState<ResultsResponse | null>(null);
-  const [view, setView] = useState<"funnel" | "results">("funnel");
+  const [view, setView] = useState<"funnel" | "lead" | "results">("funnel");
   const [status, setStatus] = useState("Preparing your assessment");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -352,8 +363,9 @@ export default function Home() {
         return;
       }
 
-      await submitAndLoadResults(sessionId);
-      setStatus("Plan ready");
+      await submitAndLoadResults(sessionId, false);
+      setStatus("Report generated");
+      setView("lead");
     } catch (caught) {
       setError(messageFrom(caught));
       setStatus("Save failed");
@@ -365,18 +377,57 @@ export default function Home() {
     }
   }
 
-  async function submitAndLoadResults(nextSessionId: string) {
+  async function submitAndLoadResults(nextSessionId: string, switchView = true) {
     setGenerating(true);
     try {
-      const submitResponse = await fetch("/api/assessment/submit", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionId: nextSessionId }),
-      });
-      await readBody<{ ok: true; resultId: string }>(submitResponse);
-      await loadResults(nextSessionId, true);
+      await Promise.all([
+        (async () => {
+          const submitResponse = await fetch("/api/assessment/submit", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ sessionId: nextSessionId }),
+          });
+          await readBody<{ ok: true; resultId: string }>(submitResponse);
+          await loadResults(nextSessionId, switchView);
+        })(),
+        wait(1200),
+      ]);
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function submitLeadContact() {
+    if (!sessionId || busy) return;
+
+    const validationError = validateLead(lead);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    try {
+      setBusy(true);
+      setError(null);
+      setStatus("Saving report access");
+
+      const response = await fetch("/api/sessions", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          name: lead.name,
+          email: lead.email,
+        }),
+      });
+      await readBody(response);
+      setStatus("Report ready");
+      setView("results");
+    } catch (caught) {
+      setError(messageFrom(caught));
+      setStatus("Save failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -440,6 +491,78 @@ export default function Home() {
           <button className="primary-button" type="button" disabled={busy} onClick={resetSetup}>
             Retry setup
           </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (generating) {
+    return (
+      <main className="page-frame">
+        <section className="app-card generating-card" aria-label="Generating report">
+          <p className="wordmark">Better Health Plan</p>
+          <div className="loader-ring" aria-hidden="true">
+            <span />
+          </div>
+          <p className="eyebrow">Generating report</p>
+          <h1>Building your metabolic plan.</h1>
+          <p className="support-copy">
+            We are calculating BMI, calorie guidance, target timing and your first plan preview from
+            the answers saved on the server.
+          </p>
+          <div className="generation-steps" aria-hidden="true">
+            <span>Calculating BMI</span>
+            <span>Estimating calories</span>
+            <span>Drafting plan preview</span>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (view === "lead" && results) {
+    return (
+      <main className="page-frame">
+        <section className="app-card lead-card" aria-label="Save generated report">
+          <p className="wordmark">Better Health Plan</p>
+          <p className="eyebrow">Report generated</p>
+          <h1>Your plan is ready. Where should we save it?</h1>
+          <p className="support-copy">
+            Add your name and email after generation so your report can be restored or sent later.
+          </p>
+
+          <div className="lead-summary">
+            <span>BMI {results.result.bmi.toFixed(1)}</span>
+            <span>{titleCase(results.result.bmiCategory)}</span>
+            <span>{results.result.recommendedCaloriesRange ?? "Detailed plan ready"}</span>
+          </div>
+
+          <div className="field-stack">
+            <TextField
+              label="Name"
+              value={lead.name}
+              placeholder="Junjie Li"
+              onChange={(value) => setLead((current) => ({ ...current, name: value }))}
+            />
+            <TextField
+              label="Email"
+              value={lead.email}
+              placeholder="you@example.com"
+              type="email"
+              onChange={(value) => setLead((current) => ({ ...current, email: value }))}
+            />
+          </div>
+
+          {error ? <div className="form-error">{error}</div> : null}
+
+          <div className="action-stack">
+            <button className="primary-button" type="button" disabled={busy} onClick={submitLeadContact}>
+              View my report
+            </button>
+            <button className="text-button" type="button" disabled={busy} onClick={() => setView("funnel")}>
+              Back to answers
+            </button>
+          </div>
         </section>
       </main>
     );
@@ -854,6 +977,33 @@ function NumberField({
   );
 }
 
+function TextField({
+  label,
+  value,
+  placeholder,
+  type = "text",
+  onChange,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  type?: "text" | "email";
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="text-field">
+      <span>{label}</span>
+      <input
+        autoComplete={type === "email" ? "email" : "name"}
+        placeholder={placeholder}
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
 function MetricCard({
   label,
   value,
@@ -1060,6 +1210,13 @@ function validateStep(step: number, form: FormState) {
   return errors;
 }
 
+function validateLead(lead: LeadState) {
+  if (lead.name.trim().length === 0) return "Add your name before viewing the report.";
+  if (lead.name.trim().length > 80) return "Name must be 80 characters or fewer.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.email.trim())) return "Enter a valid email address.";
+  return null;
+}
+
 function range(errors: string[], label: string, value: string, min: number, max: number, integer = false) {
   if (value === "") return;
   const number = Number(value);
@@ -1170,4 +1327,8 @@ function formatCountdown(seconds: number) {
 
 function messageFrom(error: unknown) {
   return error instanceof Error ? error.message : "Unexpected error";
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
