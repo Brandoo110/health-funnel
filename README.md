@@ -1,5 +1,7 @@
 # Health Funnel Challenge
 
+[![CI](https://github.com/Brandoo110/health-funnel/actions/workflows/ci.yml/badge.svg)](https://github.com/Brandoo110/health-funnel/actions/workflows/ci.yml)
+
 健康测评 funnel，全栈实现重点在后端工程骨架：分步保存、进度恢复、服务端健康算法、结果持久化、模拟订阅鉴权、非会员脱敏、`/api/pay` 解锁完整结果，以及自动化测试证明关键流程正确。
 
 ## Links
