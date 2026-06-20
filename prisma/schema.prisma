@@ -30,18 +30,53 @@ enum Goal {
   get_toned
 }
 
-/// 度量制（借鉴 BetterMe preferredMeasureSystem）
-enum MeasureSystem {
-  metric
-  imperial
-}
-
 /// 运动频率（对应 TDEE 活动系数）
 enum ActivityLevel {
   sedentary // 久坐 1.2
   light     // 轻度 1.375
   moderate  // 中度 1.55
   high      // 高度 1.725
+}
+
+enum BmiCategory {
+  underweight
+  normal
+  overweight
+  obese
+}
+
+/// 用户希望看到变化的节奏；只轻度影响热量策略，避免激进目标越过安全边界
+enum PacePreference {
+  gentle
+  standard
+  aggressive
+}
+
+enum WorkoutLocation {
+  home
+  gym
+  mixed
+}
+
+enum DietPreference {
+  balanced
+  high_protein
+  vegetarian
+  low_carb
+}
+
+enum StressLevel {
+  low
+  medium
+  high
+}
+
+enum MainBarrier {
+  no_time
+  cravings
+  motivation
+  knowledge
+  injury
 }
 
 // ---------- 用户/会话（匿名身份，UUID 识别，不做真实登录）----------
@@ -68,7 +103,6 @@ model Assessment {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  measureSystem  MeasureSystem  @default(metric)
   gender         Gender?
   goal           Goal?
   age            Int?
@@ -76,6 +110,16 @@ model Assessment {
   weightKg       Float?
   targetWeightKg Float?
   activityLevel  ActivityLevel?
+
+  /// 以下字段来自扩展问卷：不全进 BMI 公式，但用于生成训练/饮食/恢复计划
+  pacePreference   PacePreference?
+  workoutDaysPerWeek Int?
+  sessionMinutes     Int?
+  workoutLocation    WorkoutLocation?
+  dietPreference     DietPreference?
+  sleepHours         Float?
+  stressLevel        StressLevel?
+  mainBarrier        MainBarrier?
 
   /// 当前进度步（借鉴 BetterMe step，支撑“进度恢复”）
   step      Int      @default(0)
@@ -97,11 +141,12 @@ model Result {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   bmi                 Float
-  bmiCategory         String // underweight / normal / overweight / obese
+  bmiCategory         BmiCategory
   recommendedCalories Int
   /// 预测达成目标的日期（非会员脱敏时隐藏）
   targetDate          DateTime
   createdAt           DateTime @default(now())
+  updatedAt           DateTime @default(now()) @updatedAt
 
   @@map("results")
 }
