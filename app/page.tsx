@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Gender = "male" | "female";
 type Goal = "lose_weight" | "gain_muscle" | "keep_fit" | "get_toned";
@@ -94,11 +94,19 @@ type ResultsResponse = {
   };
 };
 
-type StepConfig = {
-  title: string;
+type QuestionStep = {
+  id: string;
   eyebrow: string;
+  title: string;
   description: string;
   fields: (keyof FormState)[];
+};
+
+type Option = {
+  value: string;
+  label: string;
+  helper: string;
+  mark: string;
 };
 
 const sessionStorageKey = "health-funnel-session-id";
@@ -122,36 +130,76 @@ const initialForm: FormState = {
   healthDataConsent: false,
 };
 
-const steps: StepConfig[] = [
+const questionSteps: QuestionStep[] = [
   {
-    title: "Basics",
-    eyebrow: "Identity",
-    description: "Set the inputs that shape your metabolism estimate.",
-    fields: ["gender", "age"],
+    id: "gender",
+    eyebrow: "Personalize",
+    title: "First, tell us your sex.",
+    description: "This helps calculate your BMR with the right clinical formula.",
+    fields: ["gender"],
   },
   {
-    title: "Body",
-    eyebrow: "Metrics",
-    description: "Use metric values so the server can calculate BMI and BMR.",
+    id: "age",
+    eyebrow: "Basics",
+    title: "How old are you?",
+    description: "Age changes metabolism estimates, so this stays part of the server calculation.",
+    fields: ["age"],
+  },
+  {
+    id: "body",
+    eyebrow: "Body metrics",
+    title: "Add your current and target body metrics.",
+    description: "We use metric units only in this challenge: centimeters and kilograms.",
     fields: ["heightCm", "weightKg", "targetWeightKg"],
   },
   {
-    title: "Goal",
-    eyebrow: "Direction",
-    description: "Choose the goal and pace behind the plan.",
-    fields: ["goal", "pacePreference"],
+    id: "goal",
+    eyebrow: "Goal",
+    title: "What result are you working toward?",
+    description: "Your goal shapes calorie guidance and the tone of your training plan.",
+    fields: ["goal"],
   },
   {
-    title: "Training",
-    eyebrow: "Schedule",
-    description: "Shape the weekly plan around your real training capacity.",
-    fields: ["activityLevel", "workoutDaysPerWeek", "sessionMinutes", "workoutLocation"],
+    id: "pace",
+    eyebrow: "Pace",
+    title: "Choose the pace that feels realistic.",
+    description: "A sustainable pace keeps the recommendation safer and easier to follow.",
+    fields: ["pacePreference"],
   },
   {
-    title: "Lifestyle",
-    eyebrow: "Fit",
-    description: "Tune nutrition, recovery and the paywall preview.",
-    fields: ["dietPreference", "sleepHours", "stressLevel", "mainBarrier", "healthDataConsent"],
+    id: "activity",
+    eyebrow: "Activity",
+    title: "How active are you right now?",
+    description: "This feeds the TDEE activity multiplier before the plan is generated.",
+    fields: ["activityLevel"],
+  },
+  {
+    id: "training",
+    eyebrow: "Training rhythm",
+    title: "Design your weekly training rhythm.",
+    description: "The plan adapts to your available days, session length and training place.",
+    fields: ["workoutDaysPerWeek", "sessionMinutes", "workoutLocation"],
+  },
+  {
+    id: "nutrition",
+    eyebrow: "Nutrition",
+    title: "Pick the eating style you can keep.",
+    description: "This does not replace medical advice; it only shapes practical plan copy.",
+    fields: ["dietPreference"],
+  },
+  {
+    id: "recovery",
+    eyebrow: "Recovery",
+    title: "How is your recovery baseline?",
+    description: "Sleep and stress adjust the recovery guidance in your final plan.",
+    fields: ["sleepHours", "stressLevel"],
+  },
+  {
+    id: "barrier",
+    eyebrow: "Final fit",
+    title: "What usually gets in the way?",
+    description: "We use this to make the daily actions feel less generic.",
+    fields: ["mainBarrier", "healthDataConsent"],
   },
 ];
 
@@ -161,7 +209,6 @@ export default function Home() {
   const [serverStep, setServerStep] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
   const [form, setForm] = useState<FormState>(initialForm);
-  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [results, setResults] = useState<ResultsResponse | null>(null);
   const [view, setView] = useState<"funnel" | "results">("funnel");
   const [status, setStatus] = useState("Preparing your assessment");
@@ -171,15 +218,27 @@ export default function Home() {
   const [offerOpen, setOfferOpen] = useState(false);
   const [offerApplied, setOfferApplied] = useState(false);
   const [exitOfferSeen, setExitOfferSeen] = useState(false);
+  const [countdownSeconds, setCountdownSeconds] = useState(9 * 60 + 42);
 
-  const allStepsComplete = completedSteps.size === steps.length;
-  const wheelRotation = activeStep * -72;
+  const currentStep = questionSteps[activeStep];
+  const currentErrors = useMemo(() => validateStep(activeStep, form), [activeStep, form]);
+  const progressPercent = ((activeStep + 1) / questionSteps.length) * 100;
 
   useEffect(() => {
     void bootstrapSession();
-    // 只在首次加载时创建/恢复匿名 session，避免重复创建用户。
+    // 首次进入时创建/恢复匿名 session；后续交互都复用同一条后端会话。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (view !== "results" || !results?.needPaywall) return;
+
+    const timer = window.setInterval(() => {
+      setCountdownSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [results?.needPaywall, view]);
 
   useEffect(() => {
     function onMouseLeave(event: MouseEvent) {
@@ -193,21 +252,41 @@ export default function Home() {
     return () => document.removeEventListener("mouseleave", onMouseLeave);
   }, [exitOfferSeen, results?.needPaywall, view]);
 
+  const updateField = useCallback(<K extends keyof FormState>(field: K, value: FormState[K]) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  }, []);
+
   async function bootstrapSession() {
     try {
+      setBusy(true);
       setError(null);
+      setStatus("Preparing your assessment");
+
       const storedSessionId = window.localStorage.getItem(sessionStorageKey);
-      const nextSessionId = storedSessionId ?? (await createSession());
-      if (!storedSessionId) {
-        window.localStorage.setItem(sessionStorageKey, nextSessionId);
+      if (storedSessionId) {
+        try {
+          setSessionId(storedSessionId);
+          await restoreAssessment(storedSessionId);
+          setStatus("Ready");
+          return;
+        } catch (caught) {
+          // 数据库被 reset 或 demo 数据被清理后，旧 localStorage 会导致恢复失败。
+          if (!isRecoverableSessionError(caught)) throw caught;
+          window.localStorage.removeItem(sessionStorageKey);
+        }
       }
 
+      const nextSessionId = await createSession();
+      window.localStorage.setItem(sessionStorageKey, nextSessionId);
       setSessionId(nextSessionId);
       await restoreAssessment(nextSessionId);
       setStatus("Ready");
     } catch (caught) {
+      setSessionId(null);
       setError(messageFrom(caught));
       setStatus("Setup failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -218,6 +297,7 @@ export default function Home() {
       body: JSON.stringify({}),
     });
     const body = await readBody<{ sessionId: string }>(response);
+    if (!body.sessionId) throw new Error("Session response did not include a sessionId.");
     return body.sessionId;
   }
 
@@ -227,27 +307,17 @@ export default function Home() {
 
     setVersion(body.version);
     setServerStep(body.step);
-    setCompletedSteps(stepsFromServer(body.step));
-
-    const restored = formFromAssessment(body);
-    setForm(restored);
+    setForm(formFromAssessment(body));
 
     if (body.completed) {
       await loadResults(nextSessionId, true);
       return;
     }
 
-    setActiveStep(Math.min(body.step, steps.length - 1));
+    setActiveStep(Math.min(body.step, questionSteps.length - 1));
   }
 
-  const currentStep = steps[activeStep];
-  const currentErrors = useMemo(() => validateStep(activeStep, form), [activeStep, form]);
-
-  const updateField = useCallback(<K extends keyof FormState>(field: K, value: FormState[K]) => {
-    setForm((current) => ({ ...current, [field]: value }));
-  }, []);
-
-  async function saveCurrentStep() {
+  async function continueStep() {
     if (!sessionId || busy) return;
 
     const validationErrors = validateStep(activeStep, form);
@@ -259,7 +329,7 @@ export default function Home() {
     try {
       setBusy(true);
       setError(null);
-      setStatus("Saving step");
+      setStatus(activeStep === questionSteps.length - 1 ? "Generating plan" : "Saving answer");
 
       const response = await fetch("/api/assessment", {
         method: "PATCH",
@@ -275,16 +345,19 @@ export default function Home() {
 
       setVersion(body.version);
       setServerStep(body.step);
-      setCompletedSteps(stepsFromServer(body.step));
 
-      if (activeStep < steps.length - 1) {
+      if (activeStep < questionSteps.length - 1) {
         setActiveStep((step) => step + 1);
+        setStatus("Answer saved");
+        return;
       }
-      setStatus(body.step >= steps.length ? "Ready to generate" : "Step saved");
+
+      await submitAndLoadResults(sessionId);
+      setStatus("Plan ready");
     } catch (caught) {
       setError(messageFrom(caught));
       setStatus("Save failed");
-      if (messageFrom(caught).includes("version")) {
+      if (messageFrom(caught).toLowerCase().includes("version") && sessionId) {
         await restoreAssessment(sessionId);
       }
     } finally {
@@ -292,30 +365,18 @@ export default function Home() {
     }
   }
 
-  async function generatePlan() {
-    if (!sessionId || !allStepsComplete || generating) return;
-
+  async function submitAndLoadResults(nextSessionId: string) {
+    setGenerating(true);
     try {
-      setGenerating(true);
-      setBusy(true);
-      setError(null);
-      setStatus("Generating plan");
-
       const submitResponse = await fetch("/api/assessment/submit", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionId }),
+        body: JSON.stringify({ sessionId: nextSessionId }),
       });
       await readBody<{ ok: true; resultId: string }>(submitResponse);
-
-      await loadResults(sessionId, true);
-      setStatus("Plan ready");
-    } catch (caught) {
-      setError(messageFrom(caught));
-      setStatus("Generation failed");
+      await loadResults(nextSessionId, true);
     } finally {
       setGenerating(false);
-      setBusy(false);
     }
   }
 
@@ -328,7 +389,7 @@ export default function Home() {
   }
 
   async function unlockPlan() {
-    if (!sessionId || busy) return;
+    if (!sessionId || busy || !results?.needPaywall) return;
 
     try {
       setBusy(true);
@@ -358,117 +419,96 @@ export default function Home() {
     setView("funnel");
   }
 
-  function goToStep(step: number) {
-    if (step <= serverStep || completedSteps.has(step - 1)) {
-      setError(null);
-      setActiveStep(step);
-      setView("funnel");
-    }
+  function resetSetup() {
+    window.localStorage.removeItem(sessionStorageKey);
+    setError(null);
+    void bootstrapSession();
+  }
+
+  if (!sessionId && status === "Setup failed") {
+    return (
+      <main className="page-frame">
+        <section className="app-card setup-card">
+          <p className="wordmark">Better Health Plan</p>
+          <p className="eyebrow">Setup failed</p>
+          <h1>We could not start your assessment.</h1>
+          <p className="support-copy">
+            The saved session may be stale or the API could not create a new one. Retry clears the
+            local session and asks the server for a fresh anonymous ID.
+          </p>
+          {error ? <div className="form-error">{error}</div> : null}
+          <button className="primary-button" type="button" disabled={busy} onClick={resetSetup}>
+            Retry setup
+          </button>
+        </section>
+      </main>
+    );
   }
 
   if (view === "results" && results) {
     return (
-      <main className="results-shell">
-        <section className="plan-scroll" aria-label="Generated plan">
-          <div className="result-toolbar">
-            <button className="ghost-button" type="button" onClick={() => setView("funnel")}>
+      <main className="page-frame results-frame">
+        <section className="app-card results-card" aria-label="Generated plan">
+          <div className="result-topline">
+            <button className="text-button" type="button" onClick={() => setView("funnel")}>
               Back to answers
             </button>
             {results.needPaywall ? (
-              <button
-                className="ghost-button accent"
-                type="button"
-                onClick={() => setOfferOpen(true)}
-              >
+              <button className="text-button accent" type="button" onClick={() => setOfferOpen(true)}>
                 Exit plan
               </button>
-            ) : null}
+            ) : (
+              <span className="unlock-pill">Unlocked</span>
+            )}
           </div>
 
-          <div className="result-header">
-            <p className="eyebrow">Generated plan</p>
-            <h1>Your adaptive health plan</h1>
-            <p>
-              The preview is based on your assessment and saved server-side. Unlocking the plan
-              reloads the result from the API instead of revealing hidden front-end content.
-            </p>
-          </div>
+          <p className="eyebrow">Your plan is ready</p>
+          <h1>Your metabolic snapshot is ready.</h1>
+          <p className="support-copy">
+            BMI is visible now. Exact calories, target date and detailed actions are gated by the
+            subscription state returned from the API.
+          </p>
 
           <div className="metric-grid">
-            <Metric label="BMI" value={results.result.bmi.toFixed(1)} />
-            <Metric label="Category" value={titleCase(results.result.bmiCategory)} />
-            <Metric
-              label={results.needPaywall ? "Calories range" : "Daily calories"}
+            <MetricCard
+              label="BMI"
+              value={results.result.bmi.toFixed(1)}
+              pill={titleCase(results.result.bmiCategory)}
+              tone={results.result.bmiCategory}
+            />
+            <MetricCard
+              label="Daily intake"
               value={
                 results.needPaywall
                   ? results.result.recommendedCaloriesRange ?? "Locked"
                   : `${results.result.recommendedCalories} kcal`
               }
+              locked={results.needPaywall}
+              helper={results.needPaywall ? "Exact target unlocks after payment" : "Exact server result"}
             />
-            <Metric
+            <MetricCard
               label="Target date"
               value={results.result.targetDate ? shortDate(results.result.targetDate) : "Locked"}
+              locked={results.needPaywall}
+              helper={results.needPaywall ? "Hidden in free preview" : "Based on 0.75 kg/week"}
             />
           </div>
 
-          {results.result.plan ? (
-            <div className="plan-sections">
-              {results.result.plan.sections.map((section) => (
-                <section className="plan-section" key={section.id}>
-                  <p className="eyebrow">{section.title}</p>
-                  <h2>{section.preview}</h2>
-                  <ul>
-                    {section.items.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
-          ) : (
-            <div className="plan-sections">
-              {(results.result.planPreview ?? []).map((section) => (
-                <section className="plan-section locked" key={section.id}>
-                  <p className="eyebrow">{section.title}</p>
-                  <h2>{section.preview}</h2>
-                  <div className="locked-lines" aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                </section>
-              ))}
-            </div>
-          )}
-        </section>
+          <PlanSections results={results} />
 
-        <aside className="pay-panel" aria-label="Payment panel">
-          <p className="eyebrow">Unlock</p>
-          <h2>{results.needPaywall ? "Full plan access" : "Unlocked"}</h2>
-          <p>
-            {results.needPaywall
-              ? "Get exact calories, target date, weekly workouts, nutrition and recovery actions."
-              : "Your complete plan is active for this session."}
-          </p>
-          <div className="price-box">
-            <span>{offerApplied ? "Discounted plan" : "Plan access"}</span>
-            <strong>{offerApplied ? "$9" : "$15"}</strong>
-          </div>
-          <ul className="unlock-list">
-            <li>Exact daily calorie target</li>
-            <li>Target date prediction</li>
-            <li>Workout, nutrition and recovery details</li>
-            <li>Daily actions based on your barrier</li>
-          </ul>
-          <button
-            className="primary-button full"
-            type="button"
-            disabled={!results.needPaywall || busy}
-            onClick={unlockPlan}
-          >
-            {results.needPaywall ? "Unlock full plan" : "Already unlocked"}
-          </button>
-        </aside>
+          {results.needPaywall ? (
+            <PaywallCard
+              busy={busy}
+              countdown={formatCountdown(countdownSeconds)}
+              offerApplied={offerApplied}
+              onUnlock={unlockPlan}
+            />
+          ) : (
+            <UnlockedCard results={results} />
+          )}
+
+          {error ? <div className="form-error">{error}</div> : null}
+        </section>
 
         {offerOpen ? (
           <ExitOfferModal
@@ -484,19 +524,26 @@ export default function Home() {
   }
 
   return (
-    <main className="funnel-shell">
-      <section className="projection-panel" aria-label="Assessment step">
-        <div className="top-bar">
-          <div>
-            <p className="eyebrow">Health funnel</p>
-            <h1>Build your plan</h1>
-          </div>
-          <div className="status-pill">{status}</div>
+    <main className="page-frame">
+      <section className="app-card funnel-card" aria-label="Health assessment">
+        <div className="brand-row">
+          <p className="wordmark">Better Health Plan</p>
+          <span className="status-pill">{status}</span>
         </div>
 
-        <div className="step-copy">
+        <div className="progress-meta">
+          <span>
+            Step {activeStep + 1} of {questionSteps.length}
+          </span>
+          <span>{Math.min(serverStep, questionSteps.length)} saved</span>
+        </div>
+        <div className="progress-track" aria-hidden="true">
+          <span style={{ width: `${progressPercent}%` }} />
+        </div>
+
+        <div className="question-copy">
           <p className="eyebrow">{currentStep.eyebrow}</p>
-          <h2>{currentStep.title}</h2>
+          <h1>{currentStep.title}</h1>
           <p>{currentStep.description}</p>
         </div>
 
@@ -505,56 +552,17 @@ export default function Home() {
         {error ? <div className="form-error">{error}</div> : null}
         {currentErrors.length > 0 ? <div className="form-hint">{currentErrors[0]}</div> : null}
 
-        <div className="actions-row">
-          <button className="ghost-button" type="button" disabled={activeStep === 0} onClick={backStep}>
+        <div className="action-stack">
+          <button className="primary-button" type="button" disabled={busy} onClick={continueStep}>
+            {generating
+              ? "Generating..."
+              : activeStep === questionSteps.length - 1
+                ? "Generate my plan"
+                : "Continue"}
+          </button>
+          <button className="text-button" type="button" disabled={activeStep === 0 || busy} onClick={backStep}>
             Back
           </button>
-          <button className="primary-button" type="button" disabled={busy} onClick={saveCurrentStep}>
-            {activeStep === steps.length - 1 ? "Done" : "Done, next"}
-          </button>
-        </div>
-      </section>
-
-      <section className="wheel-stage" aria-label="Assessment wheel">
-        <div className="wheel-meta">
-          <p className="eyebrow">Progress</p>
-          <strong>
-            {Math.min(serverStep, steps.length)} / {steps.length}
-          </strong>
-        </div>
-
-        <div
-          className={`step-wheel ${generating ? "spinning" : ""}`}
-          style={{ "--rotation": `${wheelRotation}deg` } as CSSProperties}
-        >
-          <div className="wheel-face">
-            {steps.map((step, index) => (
-              <button
-                className={`wheel-point ${index === activeStep ? "active" : ""} ${
-                  completedSteps.has(index) ? "done" : ""
-                }`}
-                key={step.title}
-                type="button"
-                style={wheelPointStyle(index)}
-                onClick={() => goToStep(index)}
-              >
-                <span>{step.title}</span>
-              </button>
-            ))}
-          </div>
-          <button
-            className="wheel-center"
-            type="button"
-            disabled={!allStepsComplete || generating || busy}
-            onClick={generatePlan}
-          >
-            {generating ? "Generating..." : allStepsComplete ? "Generate Plan" : currentStep.title}
-          </button>
-        </div>
-
-        <div className="wheel-note">
-          <span />
-          The wheel moves only after the server confirms the step was saved.
         </div>
       </section>
     </main>
@@ -572,66 +580,57 @@ function StepFields({
 }) {
   if (step === 0) {
     return (
-      <div className="field-grid">
-        <Segmented
-          label="Sex"
-          value={form.gender}
-          options={[
-            ["female", "Female"],
-            ["male", "Male"],
-          ]}
-          onChange={(value) => updateField("gender", value as Gender)}
-        />
-        <NumberField label="Age" value={form.age} onChange={(value) => updateField("age", value)} />
-      </div>
+      <OptionGroup
+        label="Select one"
+        value={form.gender}
+        options={[
+          { value: "female", label: "Female", helper: "Uses the female BMR coefficient.", mark: "F" },
+          { value: "male", label: "Male", helper: "Uses the male BMR coefficient.", mark: "M" },
+        ]}
+        onChange={(value) => updateField("gender", value as Gender)}
+      />
     );
   }
 
   if (step === 1) {
     return (
-      <div className="field-grid three">
-        <NumberField
-          label="Height, cm"
-          value={form.heightCm}
-          onChange={(value) => updateField("heightCm", value)}
-        />
-        <NumberField
-          label="Current weight, kg"
-          value={form.weightKg}
-          onChange={(value) => updateField("weightKg", value)}
-        />
-        <NumberField
-          label="Target weight, kg"
-          value={form.targetWeightKg}
-          onChange={(value) => updateField("targetWeightKg", value)}
-        />
-      </div>
+      <NumberField
+        label="Age"
+        value={form.age}
+        suffix="years"
+        min={13}
+        max={120}
+        onChange={(value) => updateField("age", value)}
+      />
     );
   }
 
   if (step === 2) {
     return (
-      <div className="field-grid">
-        <Segmented
-          label="Main goal"
-          value={form.goal}
-          options={[
-            ["lose_weight", "Lose weight"],
-            ["gain_muscle", "Gain muscle"],
-            ["keep_fit", "Keep fit"],
-            ["get_toned", "Get toned"],
-          ]}
-          onChange={(value) => updateField("goal", value as Goal)}
+      <div className="field-stack">
+        <NumberField
+          label="Height"
+          value={form.heightCm}
+          suffix="cm"
+          min={50}
+          max={300}
+          onChange={(value) => updateField("heightCm", value)}
         />
-        <Segmented
-          label="Pace"
-          value={form.pacePreference}
-          options={[
-            ["gentle", "Gentle"],
-            ["standard", "Standard"],
-            ["aggressive", "Ambitious"],
-          ]}
-          onChange={(value) => updateField("pacePreference", value as PacePreference)}
+        <NumberField
+          label="Current weight"
+          value={form.weightKg}
+          suffix="kg"
+          min={20}
+          max={500}
+          onChange={(value) => updateField("weightKg", value)}
+        />
+        <NumberField
+          label="Target weight"
+          value={form.targetWeightKg}
+          suffix="kg"
+          min={20}
+          max={500}
+          onChange={(value) => updateField("targetWeightKg", value)}
         />
       </div>
     );
@@ -639,35 +638,77 @@ function StepFields({
 
   if (step === 3) {
     return (
-      <div className="field-grid">
-        <Segmented
-          label="Current activity"
-          value={form.activityLevel}
-          options={[
-            ["sedentary", "Sedentary"],
-            ["light", "Light"],
-            ["moderate", "Moderate"],
-            ["high", "High"],
-          ]}
-          onChange={(value) => updateField("activityLevel", value as ActivityLevel)}
-        />
+      <OptionGroup
+        label="Main goal"
+        value={form.goal}
+        options={[
+          { value: "lose_weight", label: "Lose weight", helper: "Create a calorie deficit.", mark: "01" },
+          { value: "gain_muscle", label: "Gain muscle", helper: "Add a controlled surplus.", mark: "02" },
+          { value: "keep_fit", label: "Keep fit", helper: "Maintain and stabilize habits.", mark: "03" },
+          { value: "get_toned", label: "Get toned", helper: "Blend deficit with strength work.", mark: "04" },
+        ]}
+        onChange={(value) => updateField("goal", value as Goal)}
+      />
+    );
+  }
+
+  if (step === 4) {
+    return (
+      <OptionGroup
+        label="Preferred pace"
+        value={form.pacePreference}
+        options={[
+          { value: "gentle", label: "Gentle", helper: "Smaller changes, easier adherence.", mark: "G" },
+          { value: "standard", label: "Standard", helper: "Balanced pace for most people.", mark: "S" },
+          { value: "aggressive", label: "Ambitious", helper: "Faster intent without unsafe deficits.", mark: "A" },
+        ]}
+        onChange={(value) => updateField("pacePreference", value as PacePreference)}
+      />
+    );
+  }
+
+  if (step === 5) {
+    return (
+      <OptionGroup
+        label="Activity level"
+        value={form.activityLevel}
+        options={[
+          { value: "sedentary", label: "Sedentary", helper: "Mostly seated days.", mark: "1.2" },
+          { value: "light", label: "Light", helper: "Light movement or 1-2 workouts.", mark: "1.37" },
+          { value: "moderate", label: "Moderate", helper: "Regular weekly training.", mark: "1.55" },
+          { value: "high", label: "High", helper: "Frequent training or active work.", mark: "1.72" },
+        ]}
+        onChange={(value) => updateField("activityLevel", value as ActivityLevel)}
+      />
+    );
+  }
+
+  if (step === 6) {
+    return (
+      <div className="field-stack">
         <NumberField
-          label="Workout days / week"
+          label="Workout days"
           value={form.workoutDaysPerWeek}
+          suffix="/ week"
+          min={1}
+          max={7}
           onChange={(value) => updateField("workoutDaysPerWeek", value)}
         />
         <NumberField
-          label="Minutes / session"
+          label="Session length"
           value={form.sessionMinutes}
+          suffix="minutes"
+          min={10}
+          max={120}
           onChange={(value) => updateField("sessionMinutes", value)}
         />
-        <Segmented
+        <OptionGroup
           label="Training place"
           value={form.workoutLocation}
           options={[
-            ["home", "Home"],
-            ["gym", "Gym"],
-            ["mixed", "Mixed"],
+            { value: "home", label: "Home", helper: "Low setup, easy to repeat.", mark: "H" },
+            { value: "gym", label: "Gym", helper: "More equipment and strength focus.", mark: "G" },
+            { value: "mixed", label: "Mixed", helper: "Flexible home and gym sessions.", mark: "M" },
           ]}
           onChange={(value) => updateField("workoutLocation", value as WorkoutLocation)}
         />
@@ -675,59 +716,77 @@ function StepFields({
     );
   }
 
-  return (
-    <div className="field-grid">
-      <Segmented
-        label="Diet style"
+  if (step === 7) {
+    return (
+      <OptionGroup
+        label="Nutrition style"
         value={form.dietPreference}
         options={[
-          ["balanced", "Balanced"],
-          ["high_protein", "High protein"],
-          ["vegetarian", "Vegetarian"],
-          ["low_carb", "Lower carb"],
+          { value: "balanced", label: "Balanced", helper: "Simple portions and variety.", mark: "B" },
+          { value: "high_protein", label: "High protein", helper: "Protein-first meals and snacks.", mark: "P" },
+          { value: "vegetarian", label: "Vegetarian", helper: "Plant-forward protein choices.", mark: "V" },
+          { value: "low_carb", label: "Lower carb", helper: "Carb-aware, not extreme.", mark: "L" },
         ]}
         onChange={(value) => updateField("dietPreference", value as DietPreference)}
       />
-      <NumberField
-        label="Sleep hours"
-        value={form.sleepHours}
-        onChange={(value) => updateField("sleepHours", value)}
-      />
-      <Segmented
-        label="Stress"
-        value={form.stressLevel}
-        options={[
-          ["low", "Low"],
-          ["medium", "Medium"],
-          ["high", "High"],
-        ]}
-        onChange={(value) => updateField("stressLevel", value as StressLevel)}
-      />
-      <Segmented
+    );
+  }
+
+  if (step === 8) {
+    return (
+      <div className="field-stack">
+        <NumberField
+          label="Sleep"
+          value={form.sleepHours}
+          suffix="hours"
+          min={0}
+          max={16}
+          onChange={(value) => updateField("sleepHours", value)}
+        />
+        <OptionGroup
+          label="Stress level"
+          value={form.stressLevel}
+          options={[
+            { value: "low", label: "Low", helper: "Recovery can progress steadily.", mark: "L" },
+            { value: "medium", label: "Medium", helper: "Plan includes recovery guardrails.", mark: "M" },
+            { value: "high", label: "High", helper: "Lower intensity when needed.", mark: "H" },
+          ]}
+          onChange={(value) => updateField("stressLevel", value as StressLevel)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="field-stack">
+      <OptionGroup
         label="Main barrier"
         value={form.mainBarrier}
         options={[
-          ["no_time", "No time"],
-          ["cravings", "Cravings"],
-          ["motivation", "Motivation"],
-          ["knowledge", "Know-how"],
-          ["injury", "Limitations"],
+          { value: "no_time", label: "No time", helper: "Plan favors short, repeatable actions.", mark: "T" },
+          { value: "cravings", label: "Cravings", helper: "Plan adds snack and meal structure.", mark: "C" },
+          { value: "motivation", label: "Motivation", helper: "Plan starts with low-friction actions.", mark: "M" },
+          { value: "knowledge", label: "Know-how", helper: "Plan reduces daily choices.", mark: "K" },
+          { value: "injury", label: "Limitations", helper: "Plan keeps movement low-impact.", mark: "L" },
         ]}
         onChange={(value) => updateField("mainBarrier", value as MainBarrier)}
       />
-      <label className="consent-row">
+      <label className={`consent-card ${form.healthDataConsent ? "selected" : ""}`}>
         <input
           type="checkbox"
           checked={form.healthDataConsent}
           onChange={(event) => updateField("healthDataConsent", event.target.checked)}
         />
-        <span>I agree to use my health data to generate this plan.</span>
+        <span>
+          <strong>I agree to use my health data.</strong>
+          <small>Required so the server can calculate and store your personalized plan.</small>
+        </span>
       </label>
     </div>
   );
 }
 
-function Segmented({
+function OptionGroup({
   label,
   value,
   options,
@@ -735,21 +794,26 @@ function Segmented({
 }: {
   label: string;
   value: string;
-  options: [string, string][];
+  options: Option[];
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="field-block">
+    <div className="option-group">
       <label>{label}</label>
-      <div className="segmented-control">
-        {options.map(([optionValue, optionLabel]) => (
+      <div className="option-stack">
+        {options.map((option) => (
           <button
-            className={value === optionValue ? "selected" : ""}
-            key={optionValue}
+            className={`option-card ${value === option.value ? "selected" : ""}`}
+            key={option.value}
             type="button"
-            onClick={() => onChange(optionValue)}
+            onClick={() => onChange(option.value)}
           >
-            {optionLabel}
+            <span className="option-mark">{option.mark}</span>
+            <span className="option-copy">
+              <strong>{option.label}</strong>
+              <small>{option.helper}</small>
+            </span>
+            <span className="radio-dot" aria-hidden="true" />
           </button>
         ))}
       </div>
@@ -760,26 +824,156 @@ function Segmented({
 function NumberField({
   label,
   value,
+  suffix,
+  min,
+  max,
   onChange,
 }: {
   label: string;
   value: string;
+  suffix: string;
+  min: number;
+  max: number;
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="field-block">
-      <label>{label}</label>
-      <input inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} />
+    <label className="number-field">
+      <span>{label}</span>
+      <div className="number-input-wrap">
+        <input
+          inputMode="decimal"
+          min={min}
+          max={max}
+          type="number"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <em>{suffix}</em>
+      </div>
+    </label>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  pill,
+  tone,
+  locked = false,
+  helper,
+}: {
+  label: string;
+  value: string;
+  pill?: string;
+  tone?: string;
+  locked?: boolean;
+  helper?: string;
+}) {
+  return (
+    <div className={`metric-card ${locked ? "locked" : ""}`}>
+      <span>{label}</span>
+      <strong className={locked ? "locked-value" : ""}>{value}</strong>
+      {pill ? <em className={`metric-pill ${tone ?? ""}`}>{pill}</em> : null}
+      {locked ? <small className="lock-label">Locked exact value</small> : null}
+      {helper ? <p>{helper}</p> : null}
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function PlanSections({ results }: { results: ResultsResponse }) {
+  if (results.result.plan) {
+    return (
+      <div className="plan-list">
+        {results.result.plan.sections.map((section) => (
+          <section className="plan-card" key={section.id}>
+            <p className="eyebrow">{section.title}</p>
+            <h2>{section.preview}</h2>
+            <ul>
+              {section.items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="metric-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
+    <div className="plan-list">
+      {(results.result.planPreview ?? []).map((section, index) => {
+        const locked = index > 0;
+        return (
+          <section className={`plan-card preview ${locked ? "locked-plan" : ""}`} key={section.id}>
+            <div className="plan-card-top">
+              <p className="eyebrow">{section.title}</p>
+              {locked ? <span className="lock-chip">Locked</span> : <span className="preview-chip">Preview</span>}
+            </div>
+            <h2>{locked ? "Personalized section locked" : section.preview}</h2>
+            {locked ? (
+              <div className="locked-lines" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+            ) : (
+              <p>{section.preview}</p>
+            )}
+          </section>
+        );
+      })}
     </div>
+  );
+}
+
+function PaywallCard({
+  busy,
+  countdown,
+  offerApplied,
+  onUnlock,
+}: {
+  busy: boolean;
+  countdown: string;
+  offerApplied: boolean;
+  onUnlock: () => void;
+}) {
+  return (
+    <section className="paywall-card" aria-label="Payment offer">
+      <div className="paywall-top">
+        <p className="eyebrow">Unlock full access</p>
+        <span>{countdown}</span>
+      </div>
+      <h2>Get exact calories and your full weekly plan.</h2>
+      <p>
+        Your free preview proves the server generated the result. Payment unlocks the protected
+        fields from the API response.
+      </p>
+      <div className="price-row">
+        <div>
+          <span className="old-price">$29.99</span>
+          <strong>{offerApplied ? "$9.99" : "$14.99"}</strong>
+        </div>
+        <em>{offerApplied ? "Extra discount" : "50% off"}</em>
+      </div>
+      <button className="coral-button" type="button" disabled={busy} onClick={onUnlock}>
+        Get my plan
+      </button>
+      <small>SSL secure checkout · 4.6 star rating · 2.2M reviews</small>
+    </section>
+  );
+}
+
+function UnlockedCard({ results }: { results: ResultsResponse }) {
+  return (
+    <section className="unlocked-card">
+      <p className="eyebrow">Full plan active</p>
+      <h2>Your protected fields are now returned by the API.</h2>
+      <p>
+        Target date: {results.result.targetDate ? shortDate(results.result.targetDate) : "Available"}
+        {" · "}
+        Daily intake: {results.result.recommendedCalories} kcal
+      </p>
+    </section>
   );
 }
 
@@ -788,10 +982,10 @@ function ExitOfferModal({ onClose, onClaim }: { onClose: () => void; onClaim: ()
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Discount offer">
       <div className="offer-modal">
         <p className="eyebrow">Before you go</p>
-        <h2>Keep the plan for less</h2>
-        <p>Apply a 40% discount to unlock the full workout, nutrition and recovery plan.</p>
+        <h2>Keep the plan for less.</h2>
+        <p>Apply an extra discount to unlock the exact calories, target date and full plan.</p>
         <div className="modal-actions">
-          <button className="ghost-button" type="button" onClick={onClose}>
+          <button className="text-button" type="button" onClick={onClose}>
             Maybe later
           </button>
           <button className="primary-button" type="button" onClick={onClaim}>
@@ -804,37 +998,33 @@ function ExitOfferModal({ onClose, onClaim }: { onClose: () => void; onClaim: ()
 }
 
 function payloadForStep(step: number, form: FormState): AssessmentPayload {
-  if (step === 0) {
-    return {
-      gender: form.gender as Gender,
-      age: toNumber(form.age),
-    };
-  }
-  if (step === 1) {
+  if (step === 0) return { gender: form.gender as Gender };
+  if (step === 1) return { age: toNumber(form.age) };
+  if (step === 2) {
     return {
       heightCm: toNumber(form.heightCm),
       weightKg: toNumber(form.weightKg),
       targetWeightKg: toNumber(form.targetWeightKg),
     };
   }
-  if (step === 2) {
+  if (step === 3) return { goal: form.goal as Goal };
+  if (step === 4) return { pacePreference: form.pacePreference as PacePreference };
+  if (step === 5) return { activityLevel: form.activityLevel as ActivityLevel };
+  if (step === 6) {
     return {
-      goal: form.goal as Goal,
-      pacePreference: form.pacePreference as PacePreference,
-    };
-  }
-  if (step === 3) {
-    return {
-      activityLevel: form.activityLevel as ActivityLevel,
       workoutDaysPerWeek: toNumber(form.workoutDaysPerWeek),
       sessionMinutes: toNumber(form.sessionMinutes),
       workoutLocation: form.workoutLocation as WorkoutLocation,
     };
   }
+  if (step === 7) return { dietPreference: form.dietPreference as DietPreference };
+  if (step === 8) {
+    return {
+      sleepHours: toNumber(form.sleepHours),
+      stressLevel: form.stressLevel as StressLevel,
+    };
+  }
   return {
-    dietPreference: form.dietPreference as DietPreference,
-    sleepHours: toNumber(form.sleepHours),
-    stressLevel: form.stressLevel as StressLevel,
     mainBarrier: form.mainBarrier as MainBarrier,
     healthDataConsent: form.healthDataConsent,
   };
@@ -842,7 +1032,7 @@ function payloadForStep(step: number, form: FormState): AssessmentPayload {
 
 function validateStep(step: number, form: FormState) {
   const errors: string[] = [];
-  const required = steps[step].fields;
+  const required = questionSteps[step].fields;
 
   for (const field of required) {
     if (field === "healthDataConsent") {
@@ -855,21 +1045,17 @@ function validateStep(step: number, form: FormState) {
     }
   }
 
-  if (step === 0) {
-    range(errors, "Age", form.age, 13, 120, true);
-  }
-  if (step === 1) {
+  if (step === 1) range(errors, "Age", form.age, 13, 120, true);
+  if (step === 2) {
     range(errors, "Height", form.heightCm, 50, 300);
     range(errors, "Current weight", form.weightKg, 20, 500);
     range(errors, "Target weight", form.targetWeightKg, 20, 500);
   }
-  if (step === 3) {
+  if (step === 6) {
     range(errors, "Workout days", form.workoutDaysPerWeek, 1, 7, true);
     range(errors, "Session minutes", form.sessionMinutes, 10, 120, true);
   }
-  if (step === 4) {
-    range(errors, "Sleep hours", form.sleepHours, 0, 16);
-  }
+  if (step === 8) range(errors, "Sleep hours", form.sleepHours, 0, 16);
 
   return errors;
 }
@@ -906,33 +1092,43 @@ function formFromAssessment(response: AssessmentResponse): FormState {
   };
 }
 
-function stepsFromServer(step: number) {
-  const complete = new Set<number>();
-  for (let index = 0; index < Math.min(step, steps.length); index += 1) {
-    complete.add(index);
+class ApiClientError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "ApiClientError";
   }
-  return complete;
-}
-
-function wheelPointStyle(index: number) {
-  const angle = index * 72 - 90;
-  const radians = (angle * Math.PI) / 180;
-  const radius = 42;
-  const x = 50 + radius * Math.cos(radians);
-  const y = 50 + radius * Math.sin(radians);
-  return {
-    left: `${x}%`,
-    top: `${y}%`,
-    transform: `translate(-50%, -50%) rotate(${-index * 72}deg)`,
-  };
 }
 
 async function readBody<T = unknown>(response: Response): Promise<T> {
-  const body = (await response.json()) as T & { message?: string; error?: string };
+  const text = await response.text();
+  const body = parseJsonBody(text) as T & { message?: string; error?: string };
+
   if (!response.ok) {
-    throw new Error(body.message ?? body.error ?? "Request failed");
+    throw new ApiClientError(
+      body.message ?? body.error ?? `Request failed with status ${response.status}`,
+      response.status,
+      body.error,
+    );
   }
+
   return body;
+}
+
+function parseJsonBody(text: string) {
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: "Unexpected non-JSON server response" };
+  }
+}
+
+function isRecoverableSessionError(error: unknown) {
+  return error instanceof ApiClientError && (error.status === 404 || error.code === "not_found");
 }
 
 function toNumber(value: string) {
@@ -964,6 +1160,12 @@ function shortDate(value: string) {
     day: "numeric",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function formatCountdown(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
 function messageFrom(error: unknown) {
