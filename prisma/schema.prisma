@@ -1,7 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Prisma 7 schema —— 健康测评系统
+// datasource.url 在 prisma.config.ts（迁移走 DIRECT_URL）
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +8,116 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ---------- 枚举（用 enum 而非裸字符串，展示专业性 + 防非法值）----------
+
+enum SubscriptionStatus {
+  free
+  active
+}
+
+enum Gender {
+  male
+  female
+}
+
+/// 测评目标（借鉴 BetterMe，可按需扩展）
+enum Goal {
+  lose_weight
+  gain_muscle
+  keep_fit
+  get_toned
+}
+
+/// 度量制（借鉴 BetterMe preferredMeasureSystem）
+enum MeasureSystem {
+  metric
+  imperial
+}
+
+/// 运动频率（对应 TDEE 活动系数）
+enum ActivityLevel {
+  sedentary // 久坐 1.2
+  light     // 轻度 1.375
+  moderate  // 中度 1.55
+  high      // 高度 1.725
+}
+
+// ---------- 用户/会话（匿名身份，UUID 识别，不做真实登录）----------
+
+model User {
+  id                 String             @id @default(uuid())
+  createdAt          DateTime           @default(now())
+  /// 当前生效的订阅状态，鉴权直接读它（快）；明细见 Subscription 表
+  subscriptionStatus SubscriptionStatus @default(free)
+  /// 健康数据使用同意（合规位，借鉴 BetterMe healthDataConsent）
+  healthDataConsent  Boolean            @default(false)
+
+  assessment   Assessment?
+  result       Result?
+  subscription Subscription?
+
+  @@map("users")
+}
+
+// ---------- 测评数据（分步保存 + 进度恢复）----------
+
+model Assessment {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  measureSystem  MeasureSystem  @default(metric)
+  gender         Gender?
+  goal           Goal?
+  age            Int?
+  heightCm       Float?
+  weightKg       Float?
+  targetWeightKg Float?
+  activityLevel  ActivityLevel?
+
+  /// 当前进度步（借鉴 BetterMe step，支撑“进度恢复”）
+  step      Int      @default(0)
+  /// 是否已提交完成
+  completed Boolean  @default(false)
+  /// 乐观并发版本号（支撑“并发更新”测试）
+  version   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("assessments")
+}
+
+// ---------- 服务端计算结果 ----------
+
+model Result {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bmi                 Float
+  bmiCategory         String // underweight / normal / overweight / obese
+  recommendedCalories Int
+  /// 预测达成目标的日期（非会员脱敏时隐藏）
+  targetDate          DateTime
+  createdAt           DateTime @default(now())
+
+  @@map("results")
+}
+
+// ---------- 订阅/支付记录 ----------
+
+model Subscription {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status    SubscriptionStatus @default(free)
+  plan      String?
+  /// 模拟支付回调写入
+  paidAt    DateTime?
+  createdAt DateTime           @default(now())
+
+  @@map("subscriptions")
 }

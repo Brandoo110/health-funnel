@@ -8,7 +8,9 @@ export default defineConfig({
   migrations: {
     path: "prisma/migrations",
   },
+  // 迁移 / introspection 走 session pooler 直连（DIRECT_URL，端口 5432）；
+  // 运行时业务连接由 PrismaClient 读 DATABASE_URL（transaction pooler，6543）
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url: process.env["DIRECT_URL"],
   },
 });
