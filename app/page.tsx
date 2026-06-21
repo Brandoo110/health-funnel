@@ -569,10 +569,27 @@ export default function Home() {
   }
 
   if (view === "results" && results) {
+    const currentWeight = Number(form.weightKg);
+    const targetWeight = Number(form.targetWeightKg);
+    const targetDate = results.result.targetDate;
+    const hasProjection = Number.isFinite(currentWeight) && Number.isFinite(targetWeight);
+
     return (
       <main className="page-frame results-frame">
         <section className="app-card results-card" aria-label="Generated plan">
           <div className="result-topline">
+            <p className="wordmark">Better Health Plan</p>
+            {results.needPaywall ? (
+              <span className="countdown-pill">Offer ends in {formatCountdown(countdownSeconds)}</span>
+            ) : (
+              <span className="unlock-pill">
+                <span aria-hidden="true" />
+                Plan unlocked
+              </span>
+            )}
+          </div>
+
+          <div className="result-actions">
             <button className="text-button" type="button" onClick={() => setView("funnel")}>
               Back to answers
             </button>
@@ -580,17 +597,22 @@ export default function Home() {
               <button className="text-button accent" type="button" onClick={() => setOfferOpen(true)}>
                 Exit plan
               </button>
-            ) : (
-              <span className="unlock-pill">Unlocked</span>
-            )}
+            ) : null}
           </div>
 
-          <p className="eyebrow">Your plan is ready</p>
-          <h1>Your metabolic snapshot is ready.</h1>
+          <p className="eyebrow">Your projection</p>
+          <h1>{projectionHeadline(hasProjection, targetWeight, targetDate, results.needPaywall)}</h1>
           <p className="support-copy">
-            BMI is visible now. Exact calories, target date and detailed actions are gated by the
-            subscription state returned from the API.
+            Your result is generated from saved server data. The curve shows where your current
+            rhythm is headed, while locked values follow the subscription state returned by the API.
           </p>
+
+          <WeightProjection
+            currentWeight={currentWeight}
+            targetDate={targetDate}
+            targetWeight={targetWeight}
+            locked={results.needPaywall}
+          />
 
           <div className="metric-grid">
             <MetricCard
@@ -617,8 +639,6 @@ export default function Home() {
             />
           </div>
 
-          <PlanSections results={results} />
-
           {results.needPaywall ? (
             <PaywallCard
               busy={busy}
@@ -626,9 +646,11 @@ export default function Home() {
               offerApplied={offerApplied}
               onUnlock={unlockPlan}
             />
-          ) : (
-            <UnlockedCard results={results} />
-          )}
+          ) : null}
+
+          <PlanSections results={results} />
+
+          {!results.needPaywall ? <UnlockedCard results={results} /> : null}
 
           {error ? <div className="form-error">{error}</div> : null}
         </section>
@@ -1020,13 +1042,80 @@ function MetricCard({
   helper?: string;
 }) {
   return (
-    <div className={`metric-card ${locked ? "locked" : ""}`}>
-      <span>{label}</span>
-      <strong className={locked ? "locked-value" : ""}>{value}</strong>
-      {pill ? <em className={`metric-pill ${tone ?? ""}`}>{pill}</em> : null}
-      {locked ? <small className="lock-label">Locked exact value</small> : null}
-      {helper ? <p>{helper}</p> : null}
+    <div className={`metric-row ${locked ? "locked" : ""}`}>
+      <div className="metric-row-head">
+        <span>{label}</span>
+        {helper ? <small>{helper}</small> : null}
+      </div>
+      <div className="metric-row-value">
+        <strong className={locked ? "locked-value" : ""}>{value}</strong>
+        {pill ? <em className={`metric-pill ${tone ?? ""}`}>{pill}</em> : null}
+        {locked ? <small className="lock-label">Locked</small> : null}
+      </div>
     </div>
+  );
+}
+
+function WeightProjection({
+  currentWeight,
+  targetWeight,
+  targetDate,
+  locked,
+}: {
+  currentWeight: number;
+  targetWeight: number;
+  targetDate?: string;
+  locked: boolean;
+}) {
+  const hasWeights = Number.isFinite(currentWeight) && Number.isFinite(targetWeight);
+  const isLoss = hasWeights ? targetWeight < currentWeight : true;
+  const curvePath = isLoss
+    ? "M14,34 C150,40 210,104 300,112 S470,138 506,140"
+    : "M14,140 C150,138 210,70 300,60 S470,36 506,34";
+  const fillPath = `${curvePath} L506,160 L14,160 Z`;
+  const startY = isLoss ? 34 : 140;
+  const endY = isLoss ? 140 : 34;
+  const labelY = isLoss ? 24 : 154;
+  const targetLabelY = isLoss ? 132 : 48;
+  const currentLabel = hasWeights ? `${formatKg(currentWeight)} kg` : "Current weight";
+  const targetLabel = hasWeights ? `${formatKg(targetWeight)} kg` : "Target weight";
+  const targetDateLabel = targetDate ? shortDate(targetDate) : locked ? "Unlock date" : "Target date";
+
+  return (
+    <section className={`projection-panel ${locked ? "locked" : ""}`} aria-label="Weight projection">
+      <svg className="weight-curve" viewBox="0 0 520 170" role="img" aria-label="Weight projection curve">
+        <defs>
+          <linearGradient id="wcFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#2c4a3b" stopOpacity="0.16" />
+            <stop offset="1" stopColor="#2c4a3b" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={fillPath} fill="url(#wcFill)" />
+        <path d={curvePath} fill="none" stroke="#2c4a3b" strokeLinecap="round" strokeWidth="2.5" />
+        <circle cx="14" cy={startY} r="5" fill="#2c4a3b" />
+        <circle cx="506" cy={endY} r="6" fill="#c9a24b" stroke="#faf6ef" strokeWidth="3" />
+        <text x="20" y={labelY} fill="#8a8474" fontSize="12">
+          Now · {currentLabel}
+        </text>
+        <text
+          className={locked ? "curve-locked-label" : ""}
+          x="500"
+          y={targetLabelY}
+          fill="#23271f"
+          fontSize="12"
+          fontWeight="600"
+          textAnchor="end"
+        >
+          {targetDateLabel} · {targetLabel}
+        </text>
+      </svg>
+      {locked ? (
+        <div className="projection-lock">
+          <span>Target timing locked</span>
+          <small>Subscribe to reveal the exact target date and full action plan.</small>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -1317,6 +1406,16 @@ function shortDate(value: string) {
     day: "numeric",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function projectionHeadline(hasProjection: boolean, targetWeight: number, targetDate: string | undefined, locked: boolean) {
+  if (!hasProjection) return "Your weight projection is ready.";
+  if (locked || !targetDate) return `Your ${formatKg(targetWeight)} kg projection is waiting.`;
+  return `You're on track for ${formatKg(targetWeight)} kg by ${shortDate(targetDate)}.`;
+}
+
+function formatKg(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function formatCountdown(seconds: number) {
