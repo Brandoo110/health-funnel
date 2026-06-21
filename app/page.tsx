@@ -609,7 +609,6 @@ export default function Home() {
 
           <WeightProjection
             currentWeight={currentWeight}
-            targetDate={targetDate}
             targetWeight={targetWeight}
             locked={results.needPaywall}
           />
@@ -1059,12 +1058,10 @@ function MetricCard({
 function WeightProjection({
   currentWeight,
   targetWeight,
-  targetDate,
   locked,
 }: {
   currentWeight: number;
   targetWeight: number;
-  targetDate?: string;
   locked: boolean;
 }) {
   const hasWeights = Number.isFinite(currentWeight) && Number.isFinite(targetWeight);
@@ -1079,7 +1076,6 @@ function WeightProjection({
   const targetLabelY = isLoss ? 132 : 48;
   const currentLabel = hasWeights ? `${formatKg(currentWeight)} kg` : "Current weight";
   const targetLabel = hasWeights ? `${formatKg(targetWeight)} kg` : "Target weight";
-  const targetDateLabel = targetDate ? shortDate(targetDate) : locked ? "Unlock date" : "Target date";
 
   return (
     <section className={`projection-panel ${locked ? "locked" : ""}`} aria-label="Weight projection">
@@ -1106,7 +1102,7 @@ function WeightProjection({
           fontWeight="600"
           textAnchor="end"
         >
-          {targetDateLabel} · {targetLabel}
+          {targetLabel}
         </text>
       </svg>
       {locked ? (
@@ -1119,15 +1115,30 @@ function WeightProjection({
   );
 }
 
+const planMeta: Record<string, { icon: string; lockedMore: string }> = {
+  workout: { icon: "ti-run", lockedMore: "6 more days" },
+  nutrition: { icon: "ti-salad", lockedMore: "20 meals" },
+  recovery: { icon: "ti-moon", lockedMore: "Full guide" },
+  daily_actions: { icon: "ti-checklist", lockedMore: "Daily steps" },
+};
+
 function PlanSections({ results }: { results: ResultsResponse }) {
   if (results.result.plan) {
     return (
-      <div className="plan-list">
+      <div className="plan-stack">
+        <h2 className="section-title">What your plan includes</h2>
         {results.result.plan.sections.map((section) => (
-          <section className="plan-card" key={section.id}>
-            <p className="eyebrow">{section.title}</p>
-            <h2>{section.preview}</h2>
-            <ul>
+          <section className="plan-block" key={section.id}>
+            <div className="plan-block-head">
+              <span className="plan-icon">
+                <i className={`ti ${planMeta[section.id]?.icon ?? "ti-check"}`} aria-hidden="true" />
+              </span>
+              <div className="plan-block-copy">
+                <p className="eyebrow">{section.title}</p>
+                <h3>{section.preview}</h3>
+              </div>
+            </div>
+            <ul className="plan-items">
               {section.items.map((item) => (
                 <li key={item}>{item}</li>
               ))}
@@ -1139,25 +1150,29 @@ function PlanSections({ results }: { results: ResultsResponse }) {
   }
 
   return (
-    <div className="plan-list">
-      {(results.result.planPreview ?? []).map((section, index) => {
-        const locked = index > 0;
+    <div className="plan-stack">
+      <h2 className="section-title">What your plan includes</h2>
+      {(results.result.planPreview ?? []).map((section) => {
+        const meta = planMeta[section.id];
         return (
-          <section className={`plan-card preview ${locked ? "locked-plan" : ""}`} key={section.id}>
-            <div className="plan-card-top">
-              <p className="eyebrow">{section.title}</p>
-              {locked ? <span className="lock-chip">Locked</span> : <span className="preview-chip">Preview</span>}
-            </div>
-            <h2>{locked ? "Personalized section locked" : section.preview}</h2>
-            {locked ? (
-              <div className="locked-lines" aria-hidden="true">
-                <span />
-                <span />
-                <span />
+          <section className="plan-block teaser" key={section.id}>
+            <div className="plan-block-head">
+              <span className="plan-icon">
+                <i className={`ti ${meta?.icon ?? "ti-check"}`} aria-hidden="true" />
+              </span>
+              <div className="plan-block-copy">
+                <p className="eyebrow">{section.title}</p>
+                <h3>{section.preview}</h3>
               </div>
-            ) : (
-              <p>{section.preview}</p>
-            )}
+              <span className="lock-chip">
+                <i className="ti ti-lock" aria-hidden="true" /> {meta?.lockedMore ?? "Locked"}
+              </span>
+            </div>
+            <div className="teaser-blur" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
           </section>
         );
       })}
