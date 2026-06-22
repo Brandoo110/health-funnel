@@ -27,7 +27,7 @@ export const assessmentDataSchema = z
     activityLevel: z.enum(activityLevels).optional(),
     pacePreference: z.enum(pacePreferences).optional(),
     workoutDaysPerWeek: z.number().int().min(1).max(7).optional(),
-    sessionMinutes: z.number().int().min(10).max(120).optional(),
+    sessionMinutes: z.number().int().min(10).max(240).optional(),
     workoutLocation: z.enum(workoutLocations).optional(),
     dietPreference: z.enum(dietPreferences).optional(),
     sleepHours: z.number().min(0).max(16).optional(),

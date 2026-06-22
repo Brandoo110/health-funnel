@@ -59,8 +59,8 @@ npm test
 当前测试结果：
 
 ```txt
-Test Files  5 passed (5)
-Tests       39 passed (39)
+Test Files  6 passed (6)
+Tests       42 passed (42)
 ```
 
 补充检查：
@@ -392,6 +392,8 @@ erDiagram
 | lead 路径语义 | `persists_lead_contact_through_semantic_lead_alias` |
 | 非法邮箱 | `rejects_invalid_lead_email` |
 | 首次访问不显示重新开始入口 | `lib/landing-state.test.ts` |
+| 120 分钟以上训练时长 | `accepts_long_session_minutes_for_two_hour_plus_training` |
+| 长训练时长进入计划生成 | `lib/plan.test.ts` |
 
 暂未覆盖：
 

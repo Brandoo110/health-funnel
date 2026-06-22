@@ -220,6 +220,23 @@ const questionSteps: QuestionStep[] = [
   },
 ];
 
+const workoutDayOptions: Option[] = [
+  { value: "2", label: "1-2 days", helper: "Low pressure, easy to keep consistent.", mark: "2" },
+  { value: "3", label: "3 days", helper: "Balanced baseline for most routines.", mark: "3" },
+  { value: "4", label: "4 days", helper: "More structure without crowding recovery.", mark: "4" },
+  { value: "5", label: "5 days", helper: "Frequent training with lighter recovery days.", mark: "5" },
+  { value: "6", label: "6-7 days", helper: "High frequency; plan keeps intensity managed.", mark: "6+" },
+];
+
+const sessionLengthOptions: Option[] = [
+  { value: "30", label: "≤30 min", helper: "Short sessions for busy days.", mark: "30" },
+  { value: "45", label: "30-45 min", helper: "A compact but complete workout block.", mark: "45" },
+  { value: "60", label: "45-60 min", helper: "Standard full-session training.", mark: "60" },
+  { value: "90", label: "60-90 min", helper: "Longer sessions with warm-up and accessories.", mark: "90" },
+  { value: "120", label: "90-120 min", helper: "Extended training for higher volume days.", mark: "120" },
+  { value: "150", label: "120+ min", helper: "For two-hour-plus sessions; plan uses a 150 min anchor.", mark: "2h+" },
+];
+
 export default function Home() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
@@ -944,20 +961,16 @@ function StepFields({
   if (step === 6) {
     return (
       <div className="field-stack">
-        <NumberField
+        <OptionGroup
           label="Workout days"
           value={form.workoutDaysPerWeek}
-          suffix="/ week"
-          min={1}
-          max={7}
+          options={workoutDayOptions}
           onChange={(value) => updateField("workoutDaysPerWeek", value)}
         />
-        <NumberField
+        <OptionGroup
           label="Session length"
           value={form.sessionMinutes}
-          suffix="minutes"
-          min={10}
-          max={120}
+          options={sessionLengthOptions}
           onChange={(value) => updateField("sessionMinutes", value)}
         />
         <OptionGroup
@@ -2105,7 +2118,7 @@ function validateStep(step: number, form: FormState) {
   }
   if (step === 6) {
     range(errors, "Workout days", form.workoutDaysPerWeek, 1, 7, true);
-    range(errors, "Session minutes", form.sessionMinutes, 10, 120, true);
+    range(errors, "Session minutes", form.sessionMinutes, 10, 240, true);
   }
   if (step === 8) range(errors, "Sleep hours", form.sleepHours, 0, 16);
 

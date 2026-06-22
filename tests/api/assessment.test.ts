@@ -327,6 +327,46 @@ describe("assessment persistence API", () => {
       expect.arrayContaining(["data.workoutDaysPerWeek", "data.sleepHours"]),
     );
   });
+
+  it("accepts_long_session_minutes_for_two_hour_plus_training", async () => {
+    const sessionId = await createSessionId();
+
+    const response = await patchAssessment(
+      jsonRequest("PATCH", "/api/assessment", {
+        sessionId,
+        step: 7,
+        data: {
+          workoutDaysPerWeek: 5,
+          sessionMinutes: 150,
+          workoutLocation: "gym",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const assessment = await prisma.assessment.findUniqueOrThrow({ where: { userId: sessionId } });
+    expect(assessment.sessionMinutes).toBe(150);
+  });
+
+  it("rejects_session_minutes_over_supported_training_range", async () => {
+    const sessionId = await createSessionId();
+
+    const response = await patchAssessment(
+      jsonRequest("PATCH", "/api/assessment", {
+        sessionId,
+        step: 7,
+        data: {
+          sessionMinutes: 241,
+        },
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.details.map((detail: { path: string }) => detail.path)).toContain(
+      "data.sessionMinutes",
+    );
+  });
 });
 
 async function createSessionId() {
