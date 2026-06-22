@@ -18,6 +18,8 @@ afterEach(async () => {
 });
 
 describe("submit, results and pay API", () => {
+  const unknownSessionId = "22222222-2222-4222-8222-222222222222";
+
   it("rejects_missing_required_health_fields", async () => {
     const sessionId = await createSessionId();
     await patchAssessment(
@@ -245,12 +247,21 @@ describe("submit, results and pay API", () => {
     expect(subscriptions[0].status).toBe("active");
   });
 
-  it("returns_404_for_unknown_pay_session", async () => {
-    const response = await pay(jsonRequest("POST", "/api/pay", { sessionId: "missing-session" }));
+  it("returns_404_for_unknown_pay_uuid_session", async () => {
+    const response = await pay(jsonRequest("POST", "/api/pay", { sessionId: unknownSessionId }));
     const body = await response.json();
 
     expect(response.status).toBe(404);
     expect(body.error).toBe("not_found");
+  });
+
+  it("rejects_malformed_pay_session_id_before_database_lookup", async () => {
+    const response = await pay(jsonRequest("POST", "/api/pay", { sessionId: "missing-session" }));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("bad_request");
+    expect(body.details.map((detail: { path: string }) => detail.path)).toContain("sessionId");
   });
 });
 

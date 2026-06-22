@@ -97,9 +97,13 @@ Response:
 }
 ```
 
-### `PATCH /api/sessions`
+All APIs that accept `sessionId` validate it as a UUID before database lookup. Malformed IDs return `400 bad_request`; well-formed but unknown UUIDs return `404 not_found`.
+
+### `PATCH /api/sessions/lead`
 
 Persist lead contact after the report has been generated. This keeps name/email out of the early funnel and saves them only when the user reaches the report gate.
+
+`PATCH /api/sessions` is kept as a backward-compatible alias, but `/api/sessions/lead` is the clearer path for the current frontend.
 
 ```json
 {
@@ -358,6 +362,7 @@ The tests target the scoring rubric directly: data validation, persistence recov
 | Repeated submit / same step | `deduplicates_repeated_patch_for_same_step` |
 | Out-of-order patches | `does_not_regress_step_on_out_of_order_patch` |
 | Concurrent stale version | `rejects_stale_concurrent_patch` |
+| Malformed sessionId rejected before DB lookup | `rejects_malformed_session_id_before_database_lookup`, `rejects_malformed_pay_session_id_before_database_lookup`, `rejects_malformed_lead_session_id_before_database_lookup` |
 | Illegal numeric injection | `rejects_numeric_injection_and_null_numeric_values` |
 | Enum / range validation | `rejects_invalid_extended_questionnaire_values` |
 | Missing required fields on submit | `rejects_missing_required_health_fields` |
@@ -368,8 +373,9 @@ The tests target the scoring rubric directly: data validation, persistence recov
 | Non-member protected fields absent | explicit `not.toHaveProperty` assertions |
 | `/api/pay` state change | `unlocks_full_result_after_pay_for_same_session` |
 | `/api/pay` idempotency | `keeps_pay_idempotent_for_active_session` |
-| Unknown pay session | `returns_404_for_unknown_pay_session` |
+| Unknown pay UUID session | `returns_404_for_unknown_pay_uuid_session` |
 | Post-generation lead capture | `tests/api/sessions.test.ts` |
+| Semantic lead alias | `persists_lead_contact_through_semantic_lead_alias` |
 | Invalid lead email | `rejects_invalid_lead_email` |
 
 ## Not Covered Yet

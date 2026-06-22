@@ -73,6 +73,11 @@ type PlanSection = PlanPreview & {
   items: string[];
 };
 
+type PlanDetailGroup = {
+  title: string;
+  items: string[];
+};
+
 type ResultsResponse = {
   sessionId: string;
   subscriptionStatus: "free" | "active";
@@ -411,7 +416,7 @@ export default function Home() {
       setError(null);
       setStatus("Saving report access");
 
-      const response = await fetch("/api/sessions", {
+      const response = await fetch("/api/sessions/lead", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -677,7 +682,6 @@ export default function Home() {
               <WeightProjection
                 currentWeight={currentWeight}
                 targetWeight={targetWeight}
-                targetDate={targetDate}
                 locked={locked}
               />
             </div>
@@ -1126,12 +1130,10 @@ function TextField({
 function WeightProjection({
   currentWeight,
   targetWeight,
-  targetDate,
   locked,
 }: {
   currentWeight: number;
   targetWeight: number;
-  targetDate?: string;
   locked: boolean;
 }) {
   const hasWeights = Number.isFinite(currentWeight) && Number.isFinite(targetWeight);
@@ -1150,7 +1152,7 @@ function WeightProjection({
       ? `${formatKg(targetWeight)} kg`
       : "Target"
     : hasWeights
-      ? `${formatKg(targetWeight)} kg${targetDate ? ` · ${shortDate(targetDate)}` : ""}`
+      ? `${formatKg(targetWeight)} kg`
       : "Target weight";
 
   return (
@@ -1252,6 +1254,24 @@ const planMeta: Record<
   daily_actions: { icon: ChecklistIcon, lockedMore: "Daily steps", previewLabel: "Today's action" },
 };
 
+const fallbackLockedPlanSections: PlanPreview[] = [
+  {
+    id: "nutrition",
+    title: "Nutrition plan",
+    preview: "Meal structure, portions and weekly calorie adjustments.",
+  },
+  {
+    id: "recovery",
+    title: "Recovery plan",
+    preview: "Sleep, stress and low-intensity recovery rules.",
+  },
+  {
+    id: "daily_actions",
+    title: "Daily actions",
+    preview: "Daily checklist, habit triggers and progress review.",
+  },
+];
+
 function PlanSections({
   results,
   onUnlock,
@@ -1283,11 +1303,7 @@ function PlanSections({
                   <h3>{section.preview}</h3>
                 </div>
               </div>
-              <ul className="plan-items">
-                {section.items.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
+              <PlanDetailGroups groups={fullPlanDetailGroups(section)} />
             </section>
           );
         })}
@@ -1296,40 +1312,50 @@ function PlanSections({
   }
 
   const preview = results.result.planPreview ?? [];
+  const visiblePreview = preview[0] ?? fallbackLockedPlanSections[0];
+  const lockedPreview = lockedPreviewSections(preview);
+  const VisibleIcon = planMeta[visiblePreview.id]?.icon ?? CheckIcon;
 
   return (
     <div className="plan-stack">
       <h2 className="section-title">What your plan includes</h2>
       <p className="plan-summary-line">
-        A complete 4-part routine, personalized to your answers. Here&apos;s a taste of each — unlock
-        for the full schedule.
+        A complete 4-part routine is already drafted from your answers. One section is visible now;
+        the rest unlock with the full weekly schedule.
       </p>
-      {preview.map((section) => {
+      <section className="plan-block teaser preview-open" key={visiblePreview.id}>
+        <div className="plan-block-head">
+          <span className="plan-icon">
+            <VisibleIcon />
+          </span>
+          <div className="plan-block-copy">
+            <p className="eyebrow">{visiblePreview.title}</p>
+            <h3>{visiblePreview.preview}</h3>
+          </div>
+          <span className="preview-chip">
+            {planMeta[visiblePreview.id]?.previewLabel ?? "Preview"}
+          </span>
+        </div>
+        <PlanDetailGroups groups={previewPlanDetailGroups(visiblePreview)} />
+      </section>
+      {lockedPreview.map((section) => {
         const meta = planMeta[section.id];
         const Icon = meta?.icon ?? CheckIcon;
         return (
-          <section className="plan-block teaser" key={section.id}>
+          <section className="plan-block teaser locked-plan-block" key={section.id}>
             <div className="plan-block-head">
               <span className="plan-icon">
                 <Icon />
               </span>
               <div className="plan-block-copy">
                 <p className="eyebrow">{section.title}</p>
-                <h3>{section.preview}</h3>
+                <h3>Subscribe to reveal this part of your plan.</h3>
               </div>
               <span className="lock-chip">
                 <LockIcon /> +{meta?.lockedMore ?? "more"}
               </span>
             </div>
-            <ul className="plan-items teaser-real">
-              <li>
-                <span className="preview-dot">
-                  <CheckIcon />
-                </span>
-                {section.preview}
-                <em className="preview-flag">{meta?.previewLabel ?? "Preview"}</em>
-              </li>
-            </ul>
+            <PlanDetailGroups groups={lockedPlanDetailGroups(section)} locked />
             <div className="teaser-blur" aria-hidden="true">
               <span />
               <span />
@@ -1341,11 +1367,185 @@ function PlanSections({
       })}
       <button className="plan-unlock-strip" type="button" disabled={busy} onClick={onUnlock}>
         <LockIcon />
-        Unlock all {preview.length || 4} sections and your full weekly schedule
+        Unlock all {Math.max(preview.length, 4)} sections and your full weekly schedule
         <ArrowIcon />
       </button>
     </div>
   );
+}
+
+function PlanDetailGroups({
+  groups,
+  locked = false,
+}: {
+  groups: PlanDetailGroup[];
+  locked?: boolean;
+}) {
+  return (
+    <div className={`plan-detail-groups ${locked ? "is-locked" : ""}`}>
+      {groups.map((group) => (
+        <div className="plan-detail-group" key={group.title}>
+          <strong>{group.title}</strong>
+          <ul className="plan-items">
+            {group.items.map((item, index) => (
+              <li key={`${group.title}-${index}`}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function fullPlanDetailGroups(section: PlanSection): PlanDetailGroup[] {
+  const [first, second, third] = section.items;
+
+  if (section.id === "workout") {
+    return [
+      {
+        title: "Weekly structure",
+        items: [
+          first ?? section.preview,
+          second ?? "Keep each session short enough to complete on normal workdays.",
+        ],
+      },
+      {
+        title: "Execution notes",
+        items: [
+          third ?? "Use a lighter mobility day when soreness or stress is high.",
+          "Treat missed sessions as reschedules, not failures, so the week stays recoverable.",
+        ],
+      },
+      {
+        title: "Progress check",
+        items: [
+          "Track completion, energy and soreness after each session.",
+          "Only raise intensity after one consistent week, not after one strong day.",
+        ],
+      },
+    ];
+  }
+
+  if (section.id === "nutrition") {
+    return [
+      {
+        title: "Meal framework",
+        items: [
+          first ?? section.preview,
+          second ?? "Plan snacks before the low-energy window so choices stay deliberate.",
+        ],
+      },
+      {
+        title: "Adjustment rule",
+        items: [
+          third ?? "Adjust portions weekly based on weight trend, not one noisy day.",
+          "Keep the target simple: repeat meals that work before adding variety.",
+        ],
+      },
+      {
+        title: "What to watch",
+        items: [
+          "Use hunger, sleep and training performance as checks against an overly aggressive deficit.",
+          "If adherence drops, simplify the meal template before changing the goal.",
+        ],
+      },
+    ];
+  }
+
+  if (section.id === "recovery") {
+    return [
+      {
+        title: "Baseline rule",
+        items: [
+          first ?? section.preview,
+          second ?? "Choose lower intensity when stress is elevated.",
+        ],
+      },
+      {
+        title: "Recovery signals",
+        items: [
+          third ?? "Track energy for the first week before raising volume.",
+          "Poor sleep, heavy soreness or low motivation move the next session down one level.",
+        ],
+      },
+      {
+        title: "Why it matters",
+        items: [
+          "Recovery protects consistency, which matters more than any single hard workout.",
+          "The plan is designed to progress without forcing crash-diet or burnout patterns.",
+        ],
+      },
+    ];
+  }
+
+  return [
+    {
+      title: "Daily anchor",
+      items: [
+        first ?? section.preview,
+        second ?? "Block the action in your calendar before the day starts.",
+      ],
+    },
+    {
+      title: "Friction control",
+      items: [
+        third ?? "Review the plan each evening and choose tomorrow's smallest action.",
+        "Keep the next step visible so you do not have to decide under stress.",
+      ],
+    },
+    {
+      title: "End-of-day review",
+      items: [
+        "Mark the action complete, skipped or rescheduled.",
+        "Use the review to make tomorrow easier, not to punish today's miss.",
+      ],
+    },
+  ];
+}
+
+function previewPlanDetailGroups(section: PlanPreview): PlanDetailGroup[] {
+  return [
+    {
+      title: "Visible now",
+      items: [
+        section.preview,
+        previewDetailLine(section.id),
+      ],
+    },
+    {
+      title: "Unlock adds",
+      items: [
+        `The full version expands this into ${planMeta[section.id]?.lockedMore.toLowerCase() ?? "more detail"}.`,
+        "Member results also reveal the protected calories, target timing and complete execution order.",
+      ],
+    },
+  ];
+}
+
+function lockedPlanDetailGroups(section: PlanPreview): PlanDetailGroup[] {
+  return [
+    {
+      title: "Locked detail",
+      items: [
+        section.preview,
+        "Exact order, weekly checkpoints and member-only instructions unlock after subscription.",
+      ],
+    },
+  ];
+}
+
+function lockedPreviewSections(preview: PlanPreview[]) {
+  const existing = preview.slice(1, 4);
+  const usedIds = new Set(preview.map((section) => section.id));
+  const fallback = fallbackLockedPlanSections.filter((section) => !usedIds.has(section.id));
+  return [...existing, ...fallback].slice(0, 3);
+}
+
+function previewDetailLine(sectionId: string) {
+  if (sectionId === "workout") return "You can see the weekly training rhythm before unlocking the exact progression.";
+  if (sectionId === "nutrition") return "You can see the nutrition direction before unlocking meals and portion rules.";
+  if (sectionId === "recovery") return "You can see the recovery baseline before unlocking stress and sleep adjustments.";
+  return "You can see the first daily anchor before unlocking the full checklist.";
 }
 
 function MilestoneTimeline({

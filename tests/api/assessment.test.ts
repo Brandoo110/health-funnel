@@ -15,6 +15,8 @@ afterEach(async () => {
 });
 
 describe("assessment persistence API", () => {
+  const unknownSessionId = "11111111-1111-4111-8111-111111111111";
+
   it("returns_empty_progress_for_new_session", async () => {
     const sessionId = await createSessionId();
 
@@ -242,14 +244,25 @@ describe("assessment persistence API", () => {
     expect(assessment.age).toBe(32);
   });
 
-  it("returns_404_for_unknown_session", async () => {
+  it("returns_404_for_unknown_uuid_session", async () => {
     const response = await getAssessment(
-      new Request("http://localhost/api/assessment?sessionId=missing-session"),
+      new Request(`http://localhost/api/assessment?sessionId=${unknownSessionId}`),
     );
     const body = await response.json();
 
     expect(response.status).toBe(404);
     expect(body.error).toBe("not_found");
+  });
+
+  it("rejects_malformed_session_id_before_database_lookup", async () => {
+    const response = await getAssessment(
+      new Request("http://localhost/api/assessment?sessionId=missing-session"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("bad_request");
+    expect(body.details.map((detail: { path: string }) => detail.path)).toContain("sessionId");
   });
 
   it("rejects_invalid_patch_payload", async () => {

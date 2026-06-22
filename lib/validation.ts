@@ -11,7 +11,7 @@ import {
   workoutLocations,
 } from "./health";
 
-export const sessionIdSchema = z.string().min(1, "sessionId is required");
+export const sessionIdSchema = z.string().uuid("sessionId must be a valid UUID");
 
 export const healthDataConsentSchema = z.boolean().optional();
 
