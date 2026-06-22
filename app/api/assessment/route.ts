@@ -1,4 +1,5 @@
 import { jsonResponse, handleRouteError, readJson } from "@/lib/api";
+import { mapAnswerRows, splitAssessmentData, upsertAssessmentAnswers } from "@/lib/assessment-answers";
 import { conflict, notFound } from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
 import { patchAssessmentSchema, sessionRequestSchema } from "@/lib/validation";
@@ -12,7 +13,11 @@ export async function GET(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: sessionId },
-      include: { assessment: true },
+      include: {
+        assessment: {
+          include: { answers: { include: { question: true } } },
+        },
+      },
     });
 
     if (!user) {
@@ -32,6 +37,7 @@ export async function GET(request: Request) {
     }
 
     const { assessment } = user;
+    const extendedAnswers = mapAnswerRows(assessment.answers);
     return jsonResponse({
       sessionId,
       healthDataConsent: user.healthDataConsent,
@@ -43,14 +49,7 @@ export async function GET(request: Request) {
         weightKg: assessment.weightKg,
         targetWeightKg: assessment.targetWeightKg,
         activityLevel: assessment.activityLevel,
-        pacePreference: assessment.pacePreference,
-        workoutDaysPerWeek: assessment.workoutDaysPerWeek,
-        sessionMinutes: assessment.sessionMinutes,
-        workoutLocation: assessment.workoutLocation,
-        dietPreference: assessment.dietPreference,
-        sleepHours: assessment.sleepHours,
-        stressLevel: assessment.stressLevel,
-        mainBarrier: assessment.mainBarrier,
+        ...extendedAnswers,
       },
       step: assessment.step,
       completed: assessment.completed,
@@ -84,7 +83,8 @@ export async function PATCH(request: Request) {
     }
 
     const { healthDataConsent, ...assessmentData } = input.data;
-    const updateData = stripUndefined(assessmentData);
+    const { coreData, extendedAnswers } = splitAssessmentData(assessmentData);
+    const updateData = stripUndefined(coreData);
     // 乱序请求不能把进度往回写。
     const nextStep = Math.max(user.assessment?.step ?? 0, input.step);
 
@@ -97,8 +97,8 @@ export async function PATCH(request: Request) {
       }
 
       // 第一次保存时创建 assessment，之后每步只增量更新同一条记录。
-      return user.assessment
-        ? tx.assessment.update({
+      const savedAssessment = user.assessment
+        ? await tx.assessment.update({
             where: { userId: input.sessionId },
             data: {
               ...updateData,
@@ -106,7 +106,7 @@ export async function PATCH(request: Request) {
               version: { increment: 1 },
             },
           })
-        : tx.assessment.create({
+        : await tx.assessment.create({
             data: {
               userId: input.sessionId,
               ...updateData,
@@ -114,6 +114,10 @@ export async function PATCH(request: Request) {
               version: 1,
             },
           });
+
+      await upsertAssessmentAnswers(tx, savedAssessment.id, extendedAnswers);
+
+      return savedAssessment;
     });
 
     return jsonResponse({

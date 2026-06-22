@@ -45,38 +45,12 @@ enum BmiCategory {
   obese
 }
 
-/// 用户希望看到变化的节奏；只轻度影响热量策略，避免激进目标越过安全边界
-enum PacePreference {
-  gentle
-  standard
-  aggressive
-}
-
-enum WorkoutLocation {
-  home
-  gym
-  mixed
-}
-
-enum DietPreference {
-  balanced
-  high_protein
-  vegetarian
-  low_carb
-}
-
-enum StressLevel {
-  low
-  medium
-  high
-}
-
-enum MainBarrier {
-  no_time
-  cravings
-  motivation
-  knowledge
-  injury
+enum QuestionValueType {
+  text
+  number
+  boolean
+  single_choice
+  multi_choice
 }
 
 // ---------- 用户/会话（匿名身份，UUID 识别，不做真实登录）----------
@@ -114,16 +88,6 @@ model Assessment {
   targetWeightKg Float?
   activityLevel  ActivityLevel?
 
-  /// 以下字段来自扩展问卷：不全进 BMI 公式，但用于生成训练/饮食/恢复计划
-  pacePreference   PacePreference?
-  workoutDaysPerWeek Int?
-  sessionMinutes     Int?
-  workoutLocation    WorkoutLocation?
-  dietPreference     DietPreference?
-  sleepHours         Float?
-  stressLevel        StressLevel?
-  mainBarrier        MainBarrier?
-
   /// 当前进度步（借鉴 BetterMe step，支撑“进度恢复”）
   step      Int      @default(0)
   /// 是否已提交完成
@@ -133,7 +97,49 @@ model Assessment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  answers AssessmentAnswer[]
+
   @@map("assessments")
+}
+
+// ---------- 可扩展问卷题目与答案 ----------
+
+model QuestionnaireQuestion {
+  id        String            @id @default(uuid())
+  /// 稳定业务 key，例如 sessionMinutes；API 用 key 做兼容，不暴露内部题目 id。
+  key       String            @unique
+  label     String
+  section   String
+  valueType QuestionValueType
+  required  Boolean           @default(false)
+  active    Boolean           @default(true)
+  sortOrder Int               @default(0)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  answers AssessmentAnswer[]
+
+  @@map("questionnaire_questions")
+}
+
+model AssessmentAnswer {
+  id           String                @id @default(uuid())
+  assessmentId String
+  assessment   Assessment            @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questionId   String
+  question     QuestionnaireQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  /// 按题目类型落到受控值列；数组/复杂值才用 valueJson，避免退回“一张 JSON 大表”。
+  valueText    String?
+  valueNumber  Float?
+  valueBoolean Boolean?
+  valueJson    Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([assessmentId, questionId])
+  @@index([questionId])
+  @@map("assessment_answers")
 }
 
 // ---------- 服务端计算结果 ----------

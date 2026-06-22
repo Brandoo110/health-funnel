@@ -1,4 +1,5 @@
 import type { Assessment } from "@/app/generated/prisma/client";
+import { mapAnswerRows, type ExtendedAssessmentAnswers } from "@/lib/assessment-answers";
 import { handleRouteError, jsonResponse, readJson } from "@/lib/api";
 import { calculateHealthResult, type HealthInput } from "@/lib/health";
 import { notFound, unprocessable } from "@/lib/errors";
@@ -21,7 +22,11 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: sessionId },
-      include: { assessment: true },
+      include: {
+        assessment: {
+          include: { answers: { include: { question: true } } },
+        },
+      },
     });
 
     if (!user) {
@@ -44,7 +49,8 @@ export async function POST(request: Request) {
     let resultInput: HealthInput;
     let calculatedResult: ReturnType<typeof calculateHealthResult>;
     try {
-      resultInput = toHealthInput(user.assessment);
+      const extendedAnswers = user.assessment ? mapAnswerRows(user.assessment.answers) : {};
+      resultInput = toHealthInput(user.assessment, extendedAnswers);
       calculatedResult = calculateHealthResult(resultInput);
     } catch (error) {
       throw unprocessable("assessment_invalid", errorMessage(error));
@@ -93,7 +99,10 @@ function collectMissingFields(assessment: Assessment | null) {
   return requiredHealthFields.filter((field) => assessment[field] === null);
 }
 
-function toHealthInput(assessment: Assessment | null): HealthInput {
+function toHealthInput(
+  assessment: Assessment | null,
+  extendedAnswers: ExtendedAssessmentAnswers,
+): HealthInput {
   if (!assessment) {
     throw new Error("Assessment not found");
   }
@@ -106,7 +115,7 @@ function toHealthInput(assessment: Assessment | null): HealthInput {
     weightKg: assessment.weightKg as number,
     targetWeightKg: assessment.targetWeightKg as number,
     activityLevel: assessment.activityLevel as HealthInput["activityLevel"],
-    pacePreference: assessment.pacePreference ?? undefined,
+    pacePreference: extendedAnswers.pacePreference,
   };
 }
 

@@ -166,8 +166,34 @@ describe("assessment persistence API", () => {
     });
 
     const assessment = await prisma.assessment.findUniqueOrThrow({ where: { userId: sessionId } });
-    expect(assessment.workoutDaysPerWeek).toBe(4);
-    expect(assessment.dietPreference).toBe("high_protein");
+    const answers = await prisma.assessmentAnswer.findMany({
+      where: { assessmentId: assessment.id },
+      include: { question: true },
+      orderBy: { question: { key: "asc" } },
+    });
+
+    expect(answers.map((answer) => answer.question.key)).toEqual([
+      "dietPreference",
+      "mainBarrier",
+      "pacePreference",
+      "sessionMinutes",
+      "sleepHours",
+      "stressLevel",
+      "workoutDaysPerWeek",
+      "workoutLocation",
+    ]);
+    expect(
+      answers.map((answer) => ({
+        key: answer.question.key,
+        valueText: answer.valueText,
+        valueNumber: answer.valueNumber,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "workoutDaysPerWeek", valueNumber: 4 }),
+        expect.objectContaining({ key: "dietPreference", valueText: "high_protein" }),
+      ]),
+    );
   });
 
   it("rejects_stale_concurrent_patch", async () => {
@@ -345,7 +371,13 @@ describe("assessment persistence API", () => {
 
     expect(response.status).toBe(200);
     const assessment = await prisma.assessment.findUniqueOrThrow({ where: { userId: sessionId } });
-    expect(assessment.sessionMinutes).toBe(150);
+    const answer = await prisma.assessmentAnswer.findFirstOrThrow({
+      where: {
+        assessmentId: assessment.id,
+        question: { key: "sessionMinutes" },
+      },
+    });
+    expect(answer.valueNumber).toBe(150);
   });
 
   it("rejects_session_minutes_over_supported_training_range", async () => {

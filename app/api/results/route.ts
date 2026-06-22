@@ -1,4 +1,5 @@
 import { handleRouteError, jsonResponse } from "@/lib/api";
+import { mapAnswerRows } from "@/lib/assessment-answers";
 import { notFound } from "@/lib/errors";
 import { buildPlan, buildPlanPreview } from "@/lib/plan";
 import { prisma } from "@/lib/prisma";
@@ -16,7 +17,12 @@ export async function GET(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: sessionId },
-      include: { assessment: true, result: true },
+      include: {
+        assessment: {
+          include: { answers: { include: { question: true } } },
+        },
+        result: true,
+      },
     });
 
     if (!user) {
@@ -34,17 +40,11 @@ export async function GET(request: Request) {
       );
     }
 
+    const extendedAnswers = user.assessment ? mapAnswerRows(user.assessment.answers) : {};
     const plan = buildPlan({
       goal: user.assessment?.goal,
       activityLevel: user.assessment?.activityLevel,
-      pacePreference: user.assessment?.pacePreference,
-      workoutDaysPerWeek: user.assessment?.workoutDaysPerWeek,
-      sessionMinutes: user.assessment?.sessionMinutes,
-      workoutLocation: user.assessment?.workoutLocation,
-      dietPreference: user.assessment?.dietPreference,
-      sleepHours: user.assessment?.sleepHours,
-      stressLevel: user.assessment?.stressLevel,
-      mainBarrier: user.assessment?.mainBarrier,
+      ...extendedAnswers,
     });
 
     if (user.subscriptionStatus === "active") {

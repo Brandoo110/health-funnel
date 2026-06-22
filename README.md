@@ -296,6 +296,8 @@ erDiagram
   users ||--o| assessments : has
   users ||--o| results : has
   users ||--o| subscriptions : has
+  assessments ||--o{ assessment_answers : has
+  questionnaire_questions ||--o{ assessment_answers : defines
 
   users {
     uuid id PK
@@ -316,19 +318,32 @@ erDiagram
     float weightKg
     float targetWeightKg
     enum activityLevel
-    enum pacePreference
-    int workoutDaysPerWeek
-    int sessionMinutes
-    enum workoutLocation
-    enum dietPreference
-    float sleepHours
-    enum stressLevel
-    enum mainBarrier
     int step
     boolean completed
     int version
     datetime createdAt
     datetime updatedAt
+  }
+
+  questionnaire_questions {
+    uuid id PK
+    string key UK
+    string label
+    string section
+    enum valueType
+    boolean required
+    boolean active
+    int sortOrder
+  }
+
+  assessment_answers {
+    uuid id PK
+    uuid assessmentId FK
+    uuid questionId FK
+    string valueText
+    float valueNumber
+    boolean valueBoolean
+    json valueJson
   }
 
   results {
@@ -355,11 +370,14 @@ erDiagram
 设计说明：
 
 - `users` 是匿名会话主体，`id` 即前端使用的 `sessionId`。
-- `assessments` 保存分步问卷、进度、完成状态和并发版本。
+- `assessments` 保存核心健康字段、进度、完成状态和并发版本。
+- `questionnaire_questions` 保存可扩展问卷题目定义，新增非核心问题时不需要继续膨胀 `assessments` 主表。
+- `assessment_answers` 保存一次测评对扩展题目的答案；当前训练、饮食、睡眠、压力等计划调参字段都落在这里。
 - `results` 保存服务端计算结果，避免每次进入结果页都重新计算。
 - `subscriptions` 保存当前模拟订阅快照。
 - `users.subscriptionStatus` 是结果查询时的快速鉴权状态。
 - 当前只支持公制输入：`heightCm` 和 `weightKg`。
+- 建模取舍：核心计算字段显式列化，扩展问卷走题目/答案关系表，避免“一张 JSON 大表”和“主表无限加列”两个极端。
 
 ## 八、测试覆盖范围
 
