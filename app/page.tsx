@@ -1337,50 +1337,33 @@ function PlanSections({
   }
 
   const preview = results.result.planPreview ?? [];
-  const visiblePreview = preview[0] ?? fallbackLockedPlanSections[0];
-  const lockedPreview = lockedPreviewSections(preview);
-  const VisibleIcon = planMeta[visiblePreview.id]?.icon ?? CheckIcon;
+  const previewSections = previewPlanSections(preview);
 
   return (
     <div className="plan-stack">
       <h2 className="section-title">What your plan includes</h2>
       <p className="plan-summary-line">
-        A complete 4-part routine is already drafted from your answers. One section is visible now;
-        the rest unlock with the full weekly schedule.
+        A complete 4-part routine is already drafted from your answers. Each section shows one
+        preview line now; the full detail unlocks with the subscription.
       </p>
-      <section className="plan-block teaser preview-open" key={visiblePreview.id}>
-        <div className="plan-block-head">
-          <span className="plan-icon">
-            <VisibleIcon />
-          </span>
-          <div className="plan-block-copy">
-            <p className="eyebrow">{visiblePreview.title}</p>
-            <h3>{visiblePreview.preview}</h3>
-          </div>
-          <span className="preview-chip">
-            {planMeta[visiblePreview.id]?.previewLabel ?? "Preview"}
-          </span>
-        </div>
-        <PlanDetailGroups groups={previewPlanDetailGroups(visiblePreview)} />
-      </section>
-      {lockedPreview.map((section) => {
+      {previewSections.map((section) => {
         const meta = planMeta[section.id];
         const Icon = meta?.icon ?? CheckIcon;
         return (
-          <section className="plan-block teaser locked-plan-block" key={section.id}>
+          <section className="plan-block teaser preview-open" key={section.id}>
             <div className="plan-block-head">
               <span className="plan-icon">
                 <Icon />
               </span>
               <div className="plan-block-copy">
                 <p className="eyebrow">{section.title}</p>
-                <h3>Subscribe to reveal this part of your plan.</h3>
+                <h3>{section.preview}</h3>
               </div>
-              <span className="lock-chip">
-                <LockIcon /> +{meta?.lockedMore ?? "more"}
+              <span className="preview-chip">
+                {meta?.previewLabel ?? "Preview"}
               </span>
             </div>
-            <PlanDetailGroups groups={lockedPlanDetailGroups(section)} locked />
+            <PlanDetailGroups groups={previewPlanDetailGroups(section)} lockedFromIndex={0} />
             <div className="teaser-blur" aria-hidden="true">
               <span />
               <span />
@@ -1392,7 +1375,7 @@ function PlanSections({
       })}
       <button className="plan-unlock-strip" type="button" disabled={busy} onClick={onUnlock}>
         <LockIcon />
-        Unlock all {Math.max(preview.length, 4)} sections and your full weekly schedule
+        Unlock all {previewSections.length} sections and your full weekly schedule
         <ArrowIcon />
       </button>
     </div>
@@ -1402,14 +1385,21 @@ function PlanSections({
 function PlanDetailGroups({
   groups,
   locked = false,
+  lockedFromIndex,
 }: {
   groups: PlanDetailGroup[];
   locked?: boolean;
+  lockedFromIndex?: number;
 }) {
   return (
     <div className={`plan-detail-groups ${locked ? "is-locked" : ""}`}>
-      {groups.map((group) => (
-        <div className="plan-detail-group" key={group.title}>
+      {groups.map((group, index) => (
+        <div
+          className={`plan-detail-group ${
+            lockedFromIndex !== undefined && index >= lockedFromIndex ? "is-blurred" : ""
+          }`}
+          key={group.title}
+        >
           <strong>{group.title}</strong>
           <ul className="plan-items">
             {group.items.map((item, index) => (
@@ -1531,15 +1521,9 @@ function fullPlanDetailGroups(section: PlanSection): PlanDetailGroup[] {
 function previewPlanDetailGroups(section: PlanPreview): PlanDetailGroup[] {
   return [
     {
-      title: "Visible now",
-      items: [
-        section.preview,
-        previewDetailLine(section.id),
-      ],
-    },
-    {
       title: "Unlock adds",
       items: [
+        previewDetailLine(section.id),
         `The full version expands this into ${planMeta[section.id]?.lockedMore.toLowerCase() ?? "more detail"}.`,
         "Member results also reveal the protected calories, target timing and complete execution order.",
       ],
@@ -1547,23 +1531,10 @@ function previewPlanDetailGroups(section: PlanPreview): PlanDetailGroup[] {
   ];
 }
 
-function lockedPlanDetailGroups(section: PlanPreview): PlanDetailGroup[] {
-  return [
-    {
-      title: "Locked detail",
-      items: [
-        section.preview,
-        "Exact order, weekly checkpoints and member-only instructions unlock after subscription.",
-      ],
-    },
-  ];
-}
-
-function lockedPreviewSections(preview: PlanPreview[]) {
-  const existing = preview.slice(1, 4);
+function previewPlanSections(preview: PlanPreview[]) {
   const usedIds = new Set(preview.map((section) => section.id));
   const fallback = fallbackLockedPlanSections.filter((section) => !usedIds.has(section.id));
-  return [...existing, ...fallback].slice(0, 3);
+  return [...preview, ...fallback].slice(0, 4);
 }
 
 function previewDetailLine(sectionId: string) {

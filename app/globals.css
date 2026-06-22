@@ -1476,6 +1476,13 @@ p {
   user-select: none;
 }
 
+.plan-detail-group.is-blurred {
+  filter: blur(4px);
+  opacity: 0.62;
+  pointer-events: none;
+  user-select: none;
+}
+
 .plan-detail-group strong {
   display: block;
   color: var(--ink);
