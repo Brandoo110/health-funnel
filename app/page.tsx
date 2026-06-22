@@ -630,7 +630,7 @@ export default function Home() {
             <TextField
               label="Name"
               value={lead.name}
-              placeholder="Junjie Li"
+              placeholder="Full name"
               onChange={(value) => setLead((current) => ({ ...current, name: value }))}
             />
             <TextField
@@ -1142,7 +1142,7 @@ function TextField({
     <label className="text-field">
       <span>{label}</span>
       <input
-        autoComplete={type === "email" ? "email" : "name"}
+        autoComplete="off"
         placeholder={placeholder}
         type={type}
         value={value}

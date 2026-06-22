@@ -20,8 +20,8 @@ describe("sessions API", () => {
     const response = await updateSessionLead(
       jsonRequest("PATCH", "/api/sessions", {
         sessionId,
-        name: "  Junjie Li  ",
-        email: "  JUNJIE@example.com  ",
+        name: "  Plan Reader  ",
+        email: "  READER@example.com  ",
       }),
     );
     const body = await response.json();
@@ -30,13 +30,13 @@ describe("sessions API", () => {
     expect(body).toEqual({
       ok: true,
       sessionId,
-      name: "Junjie Li",
-      email: "junjie@example.com",
+      name: "Plan Reader",
+      email: "reader@example.com",
     });
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: sessionId } });
-    expect(user.name).toBe("Junjie Li");
-    expect(user.email).toBe("junjie@example.com");
+    expect(user.name).toBe("Plan Reader");
+    expect(user.email).toBe("reader@example.com");
   });
 
   it("rejects_invalid_lead_email", async () => {
@@ -45,7 +45,7 @@ describe("sessions API", () => {
     const response = await updateSessionLead(
       jsonRequest("PATCH", "/api/sessions", {
         sessionId,
-        name: "Junjie Li",
+        name: "Plan Reader",
         email: "not-an-email",
       }),
     );

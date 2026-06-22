@@ -111,8 +111,8 @@ CI 文件位于 `.github/workflows/ci.yml`，在 push / pull request 时自动�
 ```json
 {
   "sessionId": "uuid",
-  "name": "Junjie Li",
-  "email": "junjie@example.com"
+  "name": "Plan Reader",
+  "email": "reader@example.com"
 }
 ```
 
@@ -122,8 +122,8 @@ CI 文件位于 `.github/workflows/ci.yml`，在 push / pull request 时自动�
 {
   "ok": true,
   "sessionId": "uuid",
-  "name": "Junjie Li",
-  "email": "junjie@example.com"
+  "name": "Plan Reader",
+  "email": "reader@example.com"
 }
 ```
 
