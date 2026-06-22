@@ -1854,7 +1854,8 @@ function PaywallCard({
         </li>
       </ul>
       <small className="paywall-fineprint">
-        Trusted by 2.2M members · 4.6★ average rating · secured by 256-bit encryption
+        Demo checkout: clicking Get my plan simulates payment and unlocks this session · Trusted by
+        2.2M members · 4.6★ average rating · secured by 256-bit encryption
       </small>
     </section>
   );
