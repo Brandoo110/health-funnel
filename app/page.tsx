@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 
+import { shouldShowFreshStartAction } from "@/lib/landing-state";
+
 type Gender = "male" | "female";
 type Goal = "lose_weight" | "gain_muscle" | "keep_fit" | "get_toned";
 type ActivityLevel = "sedentary" | "light" | "moderate" | "high";
@@ -234,11 +236,13 @@ export default function Home() {
   const [offerOpen, setOfferOpen] = useState(false);
   const [offerApplied, setOfferApplied] = useState(false);
   const [exitOfferSeen, setExitOfferSeen] = useState(false);
+  const [sessionWasRestored, setSessionWasRestored] = useState(false);
   const [countdownSeconds, setCountdownSeconds] = useState(9 * 60 + 42);
 
   const currentStep = questionSteps[activeStep];
   const currentErrors = useMemo(() => validateStep(activeStep, form), [activeStep, form]);
   const progressPercent = ((activeStep + 1) / questionSteps.length) * 100;
+  const showFreshStartAction = shouldShowFreshStartAction({ sessionWasRestored });
 
   useEffect(() => {
     void bootstrapSession();
@@ -283,22 +287,27 @@ export default function Home() {
         try {
           setSessionId(storedSessionId);
           await restoreAssessment(storedSessionId, false);
+          setSessionWasRestored(true);
           setStatus("Ready");
           return;
         } catch (caught) {
           // 数据库被 reset 或 demo 数据被清理后，旧 localStorage 会导致恢复失败。
           if (!isRecoverableSessionError(caught)) throw caught;
           window.localStorage.removeItem(sessionStorageKey);
+          setSessionWasRestored(false);
         }
       }
 
       const nextSessionId = await createSession();
       window.localStorage.setItem(sessionStorageKey, nextSessionId);
       setSessionId(nextSessionId);
+      // 第一次进入时虽然会写 localStorage，但不把它当成“可重新开始”的旧会话。
+      setSessionWasRestored(false);
       await restoreAssessment(nextSessionId, false);
       setStatus("Ready");
     } catch (caught) {
       setSessionId(null);
+      setSessionWasRestored(false);
       setError(messageFrom(caught));
       setStatus("Setup failed");
     } finally {
@@ -482,6 +491,7 @@ export default function Home() {
     setForm(initialForm);
     setLead(initialLead);
     setActiveStep(0);
+    setSessionWasRestored(false);
     setView("funnel");
     void bootstrapSession();
   }
@@ -547,9 +557,11 @@ export default function Home() {
                 {busy ? "Preparing…" : "Start"}
               </button>
             )}
-            <button className="text-button" type="button" disabled={busy} onClick={resetSetup}>
-              Start fresh as a new user
-            </button>
+            {showFreshStartAction ? (
+              <button className="text-button" type="button" disabled={busy} onClick={resetSetup}>
+                Start fresh as a new user
+              </button>
+            ) : null}
           </div>
         </section>
       </main>

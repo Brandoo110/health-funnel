@@ -59,8 +59,8 @@ npm test
 当前测试结果：
 
 ```txt
-Test Files  4 passed (4)
-Tests       37 passed (37)
+Test Files  5 passed (5)
+Tests       39 passed (39)
 ```
 
 补充检查：
@@ -391,6 +391,7 @@ erDiagram
 | 报告后保存姓名 / 邮箱 | `tests/api/sessions.test.ts` |
 | lead 路径语义 | `persists_lead_contact_through_semantic_lead_alias` |
 | 非法邮箱 | `rejects_invalid_lead_email` |
+| 首次访问不显示重新开始入口 | `lib/landing-state.test.ts` |
 
 暂未覆盖：
 
