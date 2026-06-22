@@ -60,7 +60,7 @@ npm test
 
 ```txt
 Test Files  7 passed (7)
-Tests       44 passed (44)
+Tests       46 passed (46)
 ```
 
 补充检查：

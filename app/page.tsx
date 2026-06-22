@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 
-import { shouldShowFreshStartAction } from "@/lib/landing-state";
+import {
+  getInitialFunnelView,
+  isRetentionOfferApplied,
+  shouldShowFreshStartAction,
+  type FunnelView,
+} from "@/lib/landing-state";
 import { buildPriceTiers, getOfferConfig, type OfferKind } from "@/lib/pricing";
 
 type Gender = "male" | "female";
@@ -124,6 +129,7 @@ type Option = {
 
 const sessionStorageKey = "health-funnel-session-id";
 const exitOfferStorageKey = "health-funnel-show-exit-offer";
+const retentionOfferStorageKey = "health-funnel-retention-offer-session-id";
 
 const initialForm: FormState = {
   gender: "",
@@ -247,7 +253,7 @@ export default function Home() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [lead, setLead] = useState<LeadState>(initialLead);
   const [results, setResults] = useState<ResultsResponse | null>(null);
-  const [view, setView] = useState<"landing" | "funnel" | "lead" | "results">("landing");
+  const [view, setView] = useState<FunnelView>(getInitialFunnelView);
   const [status, setStatus] = useState("Preparing your assessment");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -318,7 +324,14 @@ export default function Home() {
       if (storedSessionId) {
         try {
           setSessionId(storedSessionId);
-          await restoreAssessment(storedSessionId, false, true);
+          setOfferApplied(
+            isRetentionOfferApplied({
+              sessionId: storedSessionId,
+              claimedSessionId: readRetentionOfferSessionId(),
+            }),
+          );
+          const restoredCompleted = await restoreAssessment(storedSessionId, false, true);
+          if (!restoredCompleted) setView("landing");
           setSessionWasRestored(true);
           setStatus("Ready");
           return;
@@ -326,16 +339,21 @@ export default function Home() {
           // 数据库被 reset 或 demo 数据被清理后，旧 localStorage 会导致恢复失败。
           if (!isRecoverableSessionError(caught)) throw caught;
           window.localStorage.removeItem(sessionStorageKey);
+          clearRetentionOfferSessionId();
+          setOfferApplied(false);
           setSessionWasRestored(false);
         }
       }
 
       const nextSessionId = await createSession();
       window.localStorage.setItem(sessionStorageKey, nextSessionId);
+      clearRetentionOfferSessionId();
       setSessionId(nextSessionId);
+      setOfferApplied(false);
       // 第一次进入时虽然会写 localStorage，但不把它当成“可重新开始”的旧会话。
       setSessionWasRestored(false);
-      await restoreAssessment(nextSessionId, false, false);
+      const restoredCompleted = await restoreAssessment(nextSessionId, false, false);
+      if (!restoredCompleted) setView("landing");
       setStatus("Ready");
     } catch (caught) {
       setSessionId(null);
@@ -372,10 +390,11 @@ export default function Home() {
 
     if (body.completed) {
       await loadResults(nextSessionId, restoreCompletedView);
-      return;
+      return true;
     }
 
     setActiveStep(Math.min(body.step, questionSteps.length - 1));
+    return false;
   }
 
   async function continueStep() {
@@ -529,14 +548,16 @@ export default function Home() {
 
   function resetSetup() {
     window.localStorage.removeItem(sessionStorageKey);
+    clearRetentionOfferSessionId();
     setError(null);
     setResults(null);
     setForm(initialForm);
     setLead(initialLead);
     setActiveStep(0);
+    setOfferApplied(false);
     setSessionWasRestored(false);
     window.sessionStorage.removeItem(exitOfferStorageKey);
-    setView("funnel");
+    setView("bootstrapping");
     void bootstrapSession();
   }
 
@@ -555,6 +576,25 @@ export default function Home() {
           <button className="primary-button" type="button" disabled={busy} onClick={resetSetup}>
             Retry setup
           </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (view === "bootstrapping") {
+    return (
+      <main className="page-frame">
+        <section className="app-card generating-card" aria-label="Restoring assessment">
+          <p className="wordmark">Better Health Plan</p>
+          <div className="loader-ring" aria-hidden="true">
+            <span />
+          </div>
+          <p className="eyebrow">Restoring your plan</p>
+          <h1>Preparing your saved report.</h1>
+          <p className="support-copy">
+            We are checking your saved session and subscription state before showing the next
+            screen.
+          </p>
         </section>
       </main>
     );
@@ -814,6 +854,7 @@ export default function Home() {
           <ExitOfferModal
             onClose={() => setOfferOpen(false)}
             onClaim={() => {
+              if (sessionId) persistRetentionOfferSessionId(sessionId);
               setOfferApplied(true);
               setOfferOpen(false);
             }}
@@ -2247,6 +2288,20 @@ function countdownParts(seconds: number) {
 
 function messageFrom(error: unknown) {
   return error instanceof Error ? error.message : "Unexpected error";
+}
+
+function readRetentionOfferSessionId() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(retentionOfferStorageKey);
+}
+
+function persistRetentionOfferSessionId(nextSessionId: string) {
+  window.localStorage.setItem(retentionOfferStorageKey, nextSessionId);
+}
+
+function clearRetentionOfferSessionId() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(retentionOfferStorageKey);
 }
 
 function wait(ms: number) {
