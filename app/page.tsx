@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 
 type Gender = "male" | "female";
 type Goal = "lose_weight" | "gain_muscle" | "keep_fit" | "get_toned";
@@ -573,85 +573,128 @@ export default function Home() {
     const targetWeight = Number(form.targetWeightKg);
     const targetDate = results.result.targetDate;
     const hasProjection = Number.isFinite(currentWeight) && Number.isFinite(targetWeight);
+    const locked = results.needPaywall;
+    const planWeeks = projectionWeeks(currentWeight, targetWeight);
 
     return (
       <main className="page-frame results-frame">
-        <section className="app-card results-card" aria-label="Generated plan">
-          <div className="result-topline">
-            <p className="wordmark">Better Health Plan</p>
-            {results.needPaywall ? (
-              <span className="countdown-pill">Offer ends in {formatCountdown(countdownSeconds)}</span>
+        <header className="result-topbar">
+          <p className="wordmark">Better Health Plan</p>
+          <div className="result-topbar-right">
+            {locked ? (
+              <span className="countdown-pill">
+                <ClockIcon /> {formatCountdown(countdownSeconds)}
+              </span>
             ) : (
               <span className="unlock-pill">
                 <span aria-hidden="true" />
                 Plan unlocked
               </span>
             )}
-          </div>
-
-          <div className="result-actions">
-            <button className="text-button" type="button" onClick={() => setView("funnel")}>
-              Back to answers
-            </button>
-            {results.needPaywall ? (
-              <button className="text-button accent" type="button" onClick={() => setOfferOpen(true)}>
-                Exit plan
+            {locked ? (
+              <button className="topbar-cta" type="button" disabled={busy} onClick={unlockPlan}>
+                Unlock plan
               </button>
-            ) : null}
+            ) : (
+              <button className="text-button" type="button" onClick={() => setView("funnel")}>
+                Edit answers
+              </button>
+            )}
+          </div>
+        </header>
+
+        <section className="results-card" aria-label="Generated plan">
+          <div className="result-hero">
+            <p className="eyebrow">Your personalized plan</p>
+            <h1>{planHeadline(hasProjection, planWeeks, locked)}</h1>
+            <p className="support-copy">
+              {planSubhead(hasProjection, currentWeight, targetWeight, targetDate, locked)}
+            </p>
           </div>
 
-          <p className="eyebrow">Your projection</p>
-          <h1>{projectionHeadline(hasProjection, targetWeight, targetDate, results.needPaywall)}</h1>
-          <p className="support-copy">
-            Your result is generated from saved server data. The curve shows where your current
-            rhythm is headed, while locked values follow the subscription state returned by the API.
-          </p>
+          <h2 className="section-title">Your health snapshot</h2>
+          <div className="bento-grid">
+            <div className="bento-cell bento-projection">
+              <div className="bento-label">
+                <ChartIcon />
+                <span>Weight projection</span>
+              </div>
+              <WeightProjection
+                currentWeight={currentWeight}
+                targetWeight={targetWeight}
+                targetDate={targetDate}
+                locked={locked}
+              />
+            </div>
 
-          <WeightProjection
-            currentWeight={currentWeight}
-            targetWeight={targetWeight}
-            locked={results.needPaywall}
-          />
+            <BmiCell bmi={results.result.bmi} category={results.result.bmiCategory} />
 
-          <div className="metric-grid">
-            <MetricCard
-              label="BMI"
-              value={results.result.bmi.toFixed(1)}
-              pill={titleCase(results.result.bmiCategory)}
-              tone={results.result.bmiCategory}
-            />
-            <MetricCard
-              label="Daily intake"
-              value={
-                results.needPaywall
-                  ? results.result.recommendedCaloriesRange ?? "Locked"
-                  : `${results.result.recommendedCalories} kcal`
-              }
-              locked={results.needPaywall}
-              helper={results.needPaywall ? "Exact target unlocks after payment" : "Exact server result"}
-            />
-            <MetricCard
-              label="Target date"
-              value={results.result.targetDate ? shortDate(results.result.targetDate) : "Locked"}
-              locked={results.needPaywall}
-              helper={results.needPaywall ? "Hidden in free preview" : "Based on 0.75 kg/week"}
-            />
+            <div className={`bento-cell bento-stat ${locked ? "locked" : ""}`}>
+              <div className="bento-label">
+                <FlameIcon />
+                <span>Daily intake</span>
+              </div>
+              <strong className={locked ? "locked-value" : ""}>
+                {locked
+                  ? results.result.recommendedCaloriesRange ?? "0000"
+                  : `${results.result.recommendedCalories}`}
+              </strong>
+              <small>{locked ? "kcal range hidden" : "kcal per day"}</small>
+              {locked ? (
+                <span className="lock-tag">
+                  <LockIcon /> Locked
+                </span>
+              ) : null}
+            </div>
+
+            <div className={`bento-cell bento-stat ${locked ? "locked" : ""}`}>
+              <div className="bento-label">
+                <TargetIcon />
+                <span>Goal date</span>
+              </div>
+              <strong className={locked ? "locked-value" : ""}>
+                {locked ? "Mmm 00" : targetDate ? shortDate(targetDate) : "On track"}
+              </strong>
+              <small>{locked ? "exact date hidden" : "at 0.75 kg / week"}</small>
+              {locked ? (
+                <span className="lock-tag">
+                  <LockIcon /> Locked
+                </span>
+              ) : null}
+            </div>
           </div>
 
-          {results.needPaywall ? (
+          <PlanSections results={results} onUnlock={unlockPlan} busy={busy} />
+
+          <MilestoneTimeline weeks={planWeeks} targetDate={targetDate} locked={locked} />
+
+          <SocialProof />
+
+          {locked ? (
             <PaywallCard
               busy={busy}
               countdown={formatCountdown(countdownSeconds)}
               offerApplied={offerApplied}
               onUnlock={unlockPlan}
             />
-          ) : null}
+          ) : (
+            <UnlockedCard results={results} />
+          )}
 
-          <PlanSections results={results} />
-
-          {!results.needPaywall ? <UnlockedCard results={results} /> : null}
+          <FaqSection locked={locked} />
 
           {error ? <div className="form-error">{error}</div> : null}
+
+          <footer className="result-footer">
+            <button className="text-button" type="button" onClick={() => setView("funnel")}>
+              Back to answers
+            </button>
+            {locked ? (
+              <button className="text-button accent" type="button" onClick={() => setOfferOpen(true)}>
+                I&apos;m not ready yet
+              </button>
+            ) : null}
+          </footer>
         </section>
 
         {offerOpen ? (
@@ -1025,43 +1068,15 @@ function TextField({
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  pill,
-  tone,
-  locked = false,
-  helper,
-}: {
-  label: string;
-  value: string;
-  pill?: string;
-  tone?: string;
-  locked?: boolean;
-  helper?: string;
-}) {
-  return (
-    <div className={`metric-row ${locked ? "locked" : ""}`}>
-      <div className="metric-row-head">
-        <span>{label}</span>
-        {helper ? <small>{helper}</small> : null}
-      </div>
-      <div className="metric-row-value">
-        <strong className={locked ? "locked-value" : ""}>{value}</strong>
-        {pill ? <em className={`metric-pill ${tone ?? ""}`}>{pill}</em> : null}
-        {locked ? <small className="lock-label">Locked</small> : null}
-      </div>
-    </div>
-  );
-}
-
 function WeightProjection({
   currentWeight,
   targetWeight,
+  targetDate,
   locked,
 }: {
   currentWeight: number;
   targetWeight: number;
+  targetDate?: string;
   locked: boolean;
 }) {
   const hasWeights = Number.isFinite(currentWeight) && Number.isFinite(targetWeight);
@@ -1075,10 +1090,16 @@ function WeightProjection({
   const labelY = isLoss ? 24 : 154;
   const targetLabelY = isLoss ? 132 : 48;
   const currentLabel = hasWeights ? `${formatKg(currentWeight)} kg` : "Current weight";
-  const targetLabel = hasWeights ? `${formatKg(targetWeight)} kg` : "Target weight";
+  const endTag = locked
+    ? hasWeights
+      ? `${formatKg(targetWeight)} kg`
+      : "Target"
+    : hasWeights
+      ? `${formatKg(targetWeight)} kg${targetDate ? ` · ${shortDate(targetDate)}` : ""}`
+      : "Target weight";
 
   return (
-    <section className={`projection-panel ${locked ? "locked" : ""}`} aria-label="Weight projection">
+    <div className={`projection-panel ${locked ? "locked" : ""}`} aria-label="Weight projection">
       <svg className="weight-curve" viewBox="0 0 520 170" role="img" aria-label="Weight projection curve">
         <defs>
           <linearGradient id="wcFill" x1="0" y1="0" x2="0" y2="1">
@@ -1087,7 +1108,14 @@ function WeightProjection({
           </linearGradient>
         </defs>
         <path d={fillPath} fill="url(#wcFill)" />
-        <path d={curvePath} fill="none" stroke="#2c4a3b" strokeLinecap="round" strokeWidth="2.5" />
+        <path
+          d={curvePath}
+          fill="none"
+          stroke="#2c4a3b"
+          strokeLinecap="round"
+          strokeWidth="2.5"
+          strokeDasharray="4 0"
+        />
         <circle cx="14" cy={startY} r="5" fill="#2c4a3b" />
         <circle cx="506" cy={endY} r="6" fill="#c9a24b" stroke="#faf6ef" strokeWidth="3" />
         <text x="20" y={labelY} fill="#8a8474" fontSize="12">
@@ -1102,73 +1130,153 @@ function WeightProjection({
           fontWeight="600"
           textAnchor="end"
         >
-          {targetLabel}
+          {endTag}
         </text>
       </svg>
-      {locked ? (
-        <div className="projection-lock">
-          <span>Target timing locked</span>
-          <small>Subscribe to reveal the exact target date and full action plan.</small>
-        </div>
-      ) : null}
-    </section>
+    </div>
   );
 }
 
-const planMeta: Record<string, { icon: string; lockedMore: string }> = {
-  workout: { icon: "ti-run", lockedMore: "6 more days" },
-  nutrition: { icon: "ti-salad", lockedMore: "20 meals" },
-  recovery: { icon: "ti-moon", lockedMore: "Full guide" },
-  daily_actions: { icon: "ti-checklist", lockedMore: "Daily steps" },
+function BmiCell({ bmi, category }: { bmi: number; category: string }) {
+  const segments = [
+    { key: "underweight", label: "Under", max: 18.5 },
+    { key: "normal", label: "Normal", max: 25 },
+    { key: "overweight", label: "Over", max: 30 },
+    { key: "obese", label: "Obese", max: 40 },
+  ];
+  // 把 BMI 映射到 0-100% 的刻度位置（13.5-40 区间裁剪），四段等宽。
+  const clamped = Math.min(40, Math.max(13.5, bmi));
+  const stops = [13.5, 18.5, 25, 30, 40];
+  let pointer = 0;
+  for (let i = 0; i < segments.length; i += 1) {
+    const lo = stops[i];
+    const hi = stops[i + 1];
+    if (clamped <= hi) {
+      pointer = (i + (clamped - lo) / (hi - lo)) * 25;
+      break;
+    }
+    pointer = (i + 1) * 25;
+  }
+  const tone = category;
+
+  return (
+    <div className="bento-cell bento-bmi">
+      <div className="bento-label">
+        <HeartIcon />
+        <span>Body mass index</span>
+      </div>
+      <div className="bmi-headline">
+        <strong>{bmi.toFixed(1)}</strong>
+        <em className={`metric-pill ${tone}`}>{titleCase(category)}</em>
+      </div>
+      <div className="bmi-scale" aria-hidden="true">
+        <div className="bmi-bar">
+          <span className="bmi-seg underweight" />
+          <span className="bmi-seg normal" />
+          <span className="bmi-seg overweight" />
+          <span className="bmi-seg obese" />
+          <span className="bmi-pointer" style={{ left: `${pointer}%` }} />
+        </div>
+        <div className="bmi-ticks">
+          {segments.map((segment) => (
+            <span key={segment.key}>{segment.label}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const planMeta: Record<
+  string,
+  { icon: () => ReactElement; lockedMore: string; previewLabel: string }
+> = {
+  workout: { icon: RunIcon, lockedMore: "6 more days", previewLabel: "Day 1 preview" },
+  nutrition: { icon: SaladIcon, lockedMore: "20 meals", previewLabel: "Sample meal" },
+  recovery: { icon: MoonIcon, lockedMore: "Full guide", previewLabel: "First step" },
+  daily_actions: { icon: ChecklistIcon, lockedMore: "Daily steps", previewLabel: "Today's action" },
 };
 
-function PlanSections({ results }: { results: ResultsResponse }) {
+function PlanSections({
+  results,
+  onUnlock,
+  busy,
+}: {
+  results: ResultsResponse;
+  onUnlock: () => void;
+  busy: boolean;
+}) {
   if (results.result.plan) {
     return (
       <div className="plan-stack">
         <h2 className="section-title">What your plan includes</h2>
-        {results.result.plan.sections.map((section) => (
-          <section className="plan-block" key={section.id}>
-            <div className="plan-block-head">
-              <span className="plan-icon">
-                <i className={`ti ${planMeta[section.id]?.icon ?? "ti-check"}`} aria-hidden="true" />
-              </span>
-              <div className="plan-block-copy">
-                <p className="eyebrow">{section.title}</p>
-                <h3>{section.preview}</h3>
+        {results.result.plan.summary ? (
+          <p className="plan-summary-line">
+            {summaryLine(results.result.plan.summary)}
+          </p>
+        ) : null}
+        {results.result.plan.sections.map((section) => {
+          const Icon = planMeta[section.id]?.icon ?? CheckIcon;
+          return (
+            <section className="plan-block" key={section.id}>
+              <div className="plan-block-head">
+                <span className="plan-icon">
+                  <Icon />
+                </span>
+                <div className="plan-block-copy">
+                  <p className="eyebrow">{section.title}</p>
+                  <h3>{section.preview}</h3>
+                </div>
               </div>
-            </div>
-            <ul className="plan-items">
-              {section.items.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </section>
-        ))}
+              <ul className="plan-items">
+                {section.items.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </section>
+          );
+        })}
       </div>
     );
   }
 
+  const preview = results.result.planPreview ?? [];
+
   return (
     <div className="plan-stack">
       <h2 className="section-title">What your plan includes</h2>
-      {(results.result.planPreview ?? []).map((section) => {
+      <p className="plan-summary-line">
+        A complete 4-part routine, personalized to your answers. Here&apos;s a taste of each — unlock
+        for the full schedule.
+      </p>
+      {preview.map((section) => {
         const meta = planMeta[section.id];
+        const Icon = meta?.icon ?? CheckIcon;
         return (
           <section className="plan-block teaser" key={section.id}>
             <div className="plan-block-head">
               <span className="plan-icon">
-                <i className={`ti ${meta?.icon ?? "ti-check"}`} aria-hidden="true" />
+                <Icon />
               </span>
               <div className="plan-block-copy">
                 <p className="eyebrow">{section.title}</p>
                 <h3>{section.preview}</h3>
               </div>
               <span className="lock-chip">
-                <i className="ti ti-lock" aria-hidden="true" /> {meta?.lockedMore ?? "Locked"}
+                <LockIcon /> +{meta?.lockedMore ?? "more"}
               </span>
             </div>
+            <ul className="plan-items teaser-real">
+              <li>
+                <span className="preview-dot">
+                  <CheckIcon />
+                </span>
+                {section.preview}
+                <em className="preview-flag">{meta?.previewLabel ?? "Preview"}</em>
+              </li>
+            </ul>
             <div className="teaser-blur" aria-hidden="true">
+              <span />
               <span />
               <span />
               <span />
@@ -1176,9 +1284,191 @@ function PlanSections({ results }: { results: ResultsResponse }) {
           </section>
         );
       })}
+      <button className="plan-unlock-strip" type="button" disabled={busy} onClick={onUnlock}>
+        <LockIcon />
+        Unlock all {preview.length || 4} sections and your full weekly schedule
+        <ArrowIcon />
+      </button>
     </div>
   );
 }
+
+function MilestoneTimeline({
+  weeks,
+  targetDate,
+  locked,
+}: {
+  weeks: number | null;
+  targetDate?: string;
+  locked: boolean;
+}) {
+  const goalLabel = locked
+    ? weeks
+      ? `Week ${weeks}`
+      : "Goal week"
+    : targetDate
+      ? shortDate(targetDate)
+      : weeks
+        ? `Week ${weeks}`
+        : "Goal";
+  const milestones = [
+    {
+      tag: "Week 1–2",
+      title: "Build the habit",
+      body: "Lock in your daily actions and ease into the training rhythm. Early wins keep you going.",
+    },
+    {
+      tag: "Week 4",
+      title: "Visible momentum",
+      body: "Energy and strength climb as the plan adapts. Most people notice the first real change here.",
+    },
+    {
+      tag: goalLabel,
+      title: "Reach your goal",
+      body: "Steady, sustainable progress lands you at your target without crash dieting.",
+      gold: true,
+    },
+  ];
+
+  return (
+    <div className="milestones">
+      <h2 className="section-title">Your road to results</h2>
+      <ol className="milestone-list">
+        {milestones.map((milestone, index) => (
+          <li className={`milestone ${milestone.gold ? "gold" : ""}`} key={index}>
+            <span className="milestone-node" aria-hidden="true" />
+            <div className="milestone-body">
+              <span className="milestone-tag">{milestone.tag}</span>
+              <strong>{milestone.title}</strong>
+              <p>{milestone.body}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+const socialTestimonials = [
+  {
+    quote:
+      "I'd tried everything. The day-by-day plan finally made it click — down 6 kg and it never felt like a diet.",
+    name: "Sarah M.",
+    meta: "Lost 6 kg in 8 weeks",
+  },
+  {
+    quote:
+      "The calorie target and meal ideas took all the guesswork out. I actually look forward to the workouts now.",
+    name: "David L.",
+    meta: "Member since March",
+  },
+];
+
+const pressLogos = ["Healthline", "Women's Health", "Good Housekeeping"];
+
+function SocialProof() {
+  return (
+    <div className="social-proof">
+      <div className="social-stats">
+        <div>
+          <strong>2.2M</strong>
+          <span>plans created</span>
+        </div>
+        <div>
+          <strong>
+            4.6 <StarIcon />
+          </strong>
+          <span>average rating</span>
+        </div>
+        <div>
+          <strong>93%</strong>
+          <span>hit their goal</span>
+        </div>
+      </div>
+
+      <div className="testimonials">
+        {socialTestimonials.map((testimonial) => (
+          <figure className="testimonial" key={testimonial.name}>
+            <div className="testimonial-stars" aria-hidden="true">
+              <StarIcon />
+              <StarIcon />
+              <StarIcon />
+              <StarIcon />
+              <StarIcon />
+            </div>
+            <blockquote>{testimonial.quote}</blockquote>
+            <figcaption>
+              <strong>{testimonial.name}</strong>
+              <span>{testimonial.meta}</span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+
+      <div className="press-row">
+        <span className="press-label">As featured in</span>
+        <div className="press-logos">
+          {pressLogos.map((logo) => (
+            <span key={logo}>{logo}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const faqItems = [
+  {
+    q: "Can I cancel anytime?",
+    a: "Yes. You can cancel in one tap from your account — no calls, no forms. You keep access until the end of your billing period.",
+  },
+  {
+    q: "Is my plan really personalized?",
+    a: "Every plan is built from your answers — your goal, body metrics, activity level, schedule and the barrier you told us about. No two plans are identical.",
+  },
+  {
+    q: "What if it doesn't work for me?",
+    a: "You're covered by a 30-day money-back guarantee. If you follow the plan and don't see progress, we refund you in full.",
+  },
+  {
+    q: "Do I need a gym or equipment?",
+    a: "No. Your plan adapts to where you train — home, gym or a mix — using only what you have available.",
+  },
+];
+
+function FaqSection({ locked }: { locked: boolean }) {
+  return (
+    <div className="faq">
+      <h2 className="section-title">{locked ? "Before you decide" : "Good to know"}</h2>
+      <div className="faq-list">
+        {faqItems.map((item) => (
+          <details className="faq-item" key={item.q}>
+            <summary>
+              <span>{item.q}</span>
+              <span className="faq-plus" aria-hidden="true">
+                <PlusIcon />
+              </span>
+            </summary>
+            <p>{item.a}</p>
+          </details>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const priceTiers = [
+  { id: "1week", label: "1-week trial", per: "$1.43 / day", old: "$14.99", now: "$9.99" },
+  {
+    id: "4weeks",
+    label: "4-week plan",
+    per: "$0.71 / day",
+    old: "$39.99",
+    now: "$19.99",
+    popular: true,
+  },
+  { id: "12weeks", label: "12-week plan", per: "$0.42 / day", old: "$89.99", now: "$34.99" },
+];
 
 function PaywallCard({
   busy,
@@ -1191,28 +1481,60 @@ function PaywallCard({
   offerApplied: boolean;
   onUnlock: () => void;
 }) {
+  const [selected, setSelected] = useState("4weeks");
+
   return (
     <section className="paywall-card" aria-label="Payment offer">
       <div className="paywall-top">
-        <p className="eyebrow">Unlock full access</p>
-        <span>{countdown}</span>
+        <p className="eyebrow">Unlock your full plan</p>
+        <span className="paywall-countdown">
+          <ClockIcon /> {countdown}
+        </span>
       </div>
-      <h2>Get exact calories and your full weekly plan.</h2>
+      <h2>Get your exact calories, goal date and full weekly plan.</h2>
       <p>
-        Your free preview proves the server generated the result. Payment unlocks the protected
-        fields from the API response.
+        Everything you previewed above — unlocked in full, plus the day-by-day schedule, complete
+        meal ideas and recovery guide.
       </p>
-      <div className="price-row">
-        <div>
-          <span className="old-price">$29.99</span>
-          <strong>{offerApplied ? "$9.99" : "$14.99"}</strong>
-        </div>
-        <em>{offerApplied ? "Extra discount" : "50% off"}</em>
+
+      <div className="price-tiers">
+        {priceTiers.map((tier) => (
+          <button
+            className={`price-tier ${selected === tier.id ? "selected" : ""}`}
+            key={tier.id}
+            type="button"
+            onClick={() => setSelected(tier.id)}
+          >
+            {tier.popular ? <span className="tier-flag">Most popular</span> : null}
+            <span className="tier-label">{tier.label}</span>
+            <span className="tier-price">
+              <strong>{offerApplied && tier.id === "12weeks" ? "$24.99" : tier.now}</strong>
+              <em>{tier.old}</em>
+            </span>
+            <span className="tier-per">{tier.per}</span>
+            <span className="tier-radio" aria-hidden="true" />
+          </button>
+        ))}
       </div>
+
       <button className="coral-button" type="button" disabled={busy} onClick={onUnlock}>
-        Get my plan
+        Get my plan now
       </button>
-      <small>SSL secure checkout · 4.6 star rating · 2.2M reviews</small>
+
+      <ul className="paywall-trust">
+        <li>
+          <ShieldIcon /> 30-day money-back guarantee
+        </li>
+        <li>
+          <LockIcon /> SSL-secured checkout
+        </li>
+        <li>
+          <CardIcon /> Cancel anytime
+        </li>
+      </ul>
+      <small className="paywall-fineprint">
+        Trusted by 2.2M members · 4.6★ average rating · secured by 256-bit encryption
+      </small>
     </section>
   );
 }
@@ -1220,13 +1542,27 @@ function PaywallCard({
 function UnlockedCard({ results }: { results: ResultsResponse }) {
   return (
     <section className="unlocked-card">
-      <p className="eyebrow">Full plan active</p>
-      <h2>Your protected fields are now returned by the API.</h2>
-      <p>
-        Target date: {results.result.targetDate ? shortDate(results.result.targetDate) : "Available"}
-        {" · "}
-        Daily intake: {results.result.recommendedCalories} kcal
-      </p>
+      <div className="unlocked-head">
+        <span className="unlocked-icon">
+          <CheckIcon />
+        </span>
+        <div>
+          <p className="eyebrow">Full plan active</p>
+          <h2>You&apos;re all set — everything below is unlocked.</h2>
+        </div>
+      </div>
+      <div className="unlocked-stats">
+        <div>
+          <span>Daily intake</span>
+          <strong>{results.result.recommendedCalories} kcal</strong>
+        </div>
+        <div>
+          <span>Goal date</span>
+          <strong>
+            {results.result.targetDate ? shortDate(results.result.targetDate) : "On track"}
+          </strong>
+        </div>
+      </div>
     </section>
   );
 }
@@ -1249,6 +1585,201 @@ function ExitOfferModal({ onClose, onClaim }: { onClose: () => void; onClaim: ()
       </div>
     </div>
   );
+}
+
+function iconProps(extra?: string) {
+  return {
+    className: `icon ${extra ?? ""}`.trim(),
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+}
+
+function ChartIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M4 19V5M4 19h16" />
+      <path d="M7 15l3.5-4 3 2.5L20 7" />
+    </svg>
+  );
+}
+
+function HeartIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M12 20s-7-4.6-9.2-9C1.3 8 2.6 5 5.6 5 7.4 5 8.8 6 12 9c3.2-3 4.6-4 6.4-4 3 0 4.3 3 2.8 6-2.2 4.4-9.2 9-9.2 9z" />
+    </svg>
+  );
+}
+
+function FlameIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M12 3c1 3-2 4-2 7a2 2 0 0 0 4 0c0-1 0-1.5-.3-2.2C16 10 18 12.5 18 15a6 6 0 1 1-12 0c0-3.5 3-5.5 4-8 .5-1.3 1.3-2.7 2-4z" />
+    </svg>
+  );
+}
+
+function TargetIcon() {
+  return (
+    <svg {...iconProps()}>
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="12" cy="12" r="0.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg {...iconProps()}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg {...iconProps()}>
+      <rect x="5" y="10.5" width="14" height="9.5" rx="2" />
+      <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+    </svg>
+  );
+}
+
+function RunIcon() {
+  return (
+    <svg {...iconProps()}>
+      <circle cx="15.5" cy="5" r="1.6" />
+      <path d="M5 21l3-4 3 1 1-4-3-2 4-3 2 3 3 1" />
+    </svg>
+  );
+}
+
+function SaladIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M4 11h16a8 8 0 0 1-16 0z" />
+      <path d="M9 11c-.5-2 .5-4 2.5-4.5M14 11c0-2.5 1.5-3.5 3.5-3.5M12 4v2.5" />
+      <path d="M7 19h10" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M19 14.5A7.5 7.5 0 0 1 9.5 5 7.5 7.5 0 1 0 19 14.5z" />
+    </svg>
+  );
+}
+
+function ChecklistIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M9 6h11M9 12h11M9 18h11" />
+      <path d="M4 6l1 1 1.5-2M4 12l1 1 1.5-2M4 18l1 1 1.5-2" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M5 12.5l4.5 4.5L19 6.5" />
+    </svg>
+  );
+}
+
+function ArrowIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+function StarIcon() {
+  return (
+    <svg className="icon star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 3.5l2.6 5.3 5.9.8-4.3 4.1 1 5.8L12 16.9 6.8 19.5l1-5.8L3.5 9.6l5.9-.8z" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M12 3l7 2.5v5C19 16 16 19.5 12 21c-4-1.5-7-5-7-10.5v-5z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
+
+function CardIcon() {
+  return (
+    <svg {...iconProps()}>
+      <rect x="3" y="6" width="18" height="12" rx="2" />
+      <path d="M3 10h18M7 15h3" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M12 6v12M6 12h12" />
+    </svg>
+  );
+}
+
+function projectionWeeks(currentWeight: number, targetWeight: number): number | null {
+  if (!Number.isFinite(currentWeight) || !Number.isFinite(targetWeight)) return null;
+  const diff = Math.abs(currentWeight - targetWeight);
+  if (diff === 0) return null;
+  return Math.max(1, Math.ceil(diff / 0.75));
+}
+
+function planHeadline(hasProjection: boolean, weeks: number | null, locked: boolean) {
+  if (hasProjection && weeks) {
+    const weekLabel = weeks === 1 ? "1-week" : `${weeks}-week`;
+    return locked ? `Your ${weekLabel} plan is ready.` : `Your ${weekLabel} plan is unlocked.`;
+  }
+  return locked ? "Your personalized plan is ready." : "Your personalized plan is unlocked.";
+}
+
+function planSubhead(
+  hasProjection: boolean,
+  currentWeight: number,
+  targetWeight: number,
+  targetDate: string | undefined,
+  locked: boolean,
+) {
+  if (!hasProjection) {
+    return "Built from your answers — your goal, body metrics, routine and recovery all shaped this plan.";
+  }
+  const direction = targetWeight < currentWeight ? "reach" : "build toward";
+  const goal = `${direction} ${formatKg(targetWeight)} kg`;
+  if (!locked && targetDate) {
+    return `On a sustainable 0.75 kg/week pace, you're on track to ${goal} by ${shortDate(targetDate)}.`;
+  }
+  return `On a sustainable 0.75 kg/week pace, here's your path to ${goal} — unlock to see your exact goal date.`;
+}
+
+function summaryLine(summary: {
+  pacePreference: PacePreference;
+  workoutDaysPerWeek: number;
+  sessionMinutes: number;
+  workoutLocation: WorkoutLocation;
+  dietPreference: DietPreference;
+}) {
+  return `${titleCase(summary.pacePreference)} pace · ${summary.workoutDaysPerWeek} days/week · ${summary.sessionMinutes} min · ${titleCase(summary.workoutLocation)} · ${titleCase(summary.dietPreference)} nutrition`;
 }
 
 function payloadForStep(step: number, form: FormState): AssessmentPayload {
@@ -1421,12 +1952,6 @@ function shortDate(value: string) {
     day: "numeric",
     year: "numeric",
   }).format(new Date(value));
-}
-
-function projectionHeadline(hasProjection: boolean, targetWeight: number, targetDate: string | undefined, locked: boolean) {
-  if (!hasProjection) return "Your weight projection is ready.";
-  if (locked || !targetDate) return `Your ${formatKg(targetWeight)} kg projection is waiting.`;
-  return `You're on track for ${formatKg(targetWeight)} kg by ${shortDate(targetDate)}.`;
 }
 
 function formatKg(value: number) {
