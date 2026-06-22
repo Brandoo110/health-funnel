@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+} from "react";
 
 import {
   getInitialFunnelView,
@@ -268,6 +275,14 @@ export default function Home() {
   const currentErrors = useMemo(() => validateStep(activeStep, form), [activeStep, form]);
   const progressPercent = ((activeStep + 1) / questionSteps.length) * 100;
   const showFreshStartAction = shouldShowFreshStartAction({ sessionWasRestored });
+
+  useLayoutEffect(() => {
+    if (window.localStorage.getItem(sessionStorageKey)) {
+      // 已有 session 时必须在首屏绘制前切到恢复态，避免结果页刷新闪回首页。
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setView("bootstrapping");
+    }
+  }, []);
 
   useEffect(() => {
     void bootstrapSession();

@@ -15,8 +15,8 @@ describe("landing action state", () => {
     expect(shouldShowFreshStartAction({ sessionWasRestored: true })).toBe(true);
   });
 
-  it("starts in a bootstrapping view so restored result pages do not flash landing", () => {
-    expect(getInitialFunnelView()).toBe("bootstrapping");
+  it("starts on landing when no saved session has been detected yet", () => {
+    expect(getInitialFunnelView()).toBe("landing");
   });
 
   it("keeps the claimed retention offer only for the same restored session", () => {

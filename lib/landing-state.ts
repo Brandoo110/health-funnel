@@ -10,7 +10,7 @@ type RetentionOfferInput = {
 };
 
 export function getInitialFunnelView(): FunnelView {
-  return "bootstrapping";
+  return "landing";
 }
 
 export function shouldShowFreshStartAction({ sessionWasRestored }: FreshStartActionInput) {
