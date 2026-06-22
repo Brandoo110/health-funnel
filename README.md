@@ -1,38 +1,39 @@
-# Health Funnel Challenge
+# 健康测评 Funnel 全栈挑战
 
 [![CI](https://github.com/Brandoo110/health-funnel/actions/workflows/ci.yml/badge.svg)](https://github.com/Brandoo110/health-funnel/actions/workflows/ci.yml)
 
-健康测评 funnel，全栈实现重点在后端工程骨架：分步保存、进度恢复、服务端健康算法、结果持久化、模拟订阅鉴权、非会员脱敏、`/api/pay` 解锁完整结果，以及自动化测试证明关键流程正确。
+这是一个健康测评 funnel 的全栈实现。重点不是复刻竞品页面，而是把核心后端闭环做完整：分步保存、进度恢复、服务端健康算法、结果持久化、模拟订阅鉴权、非会员脱敏、`/api/pay` 解锁完整结果，以及自动化测试证明关键路径和边界场景正确。
 
-## Links
+## 一、线上演示
 
-- GitHub: [Brandoo110/health-funnel](https://github.com/Brandoo110/health-funnel)
-- Production: [https://health-funnel.vercel.app](https://health-funnel.vercel.app)
-- Paid test sessionId: `80e14ffa-dd7d-41fc-8406-d43fc2258e5e`
-- Production `/api/pay` verification: 2026-06-20 22:27 AEST
+- 线上地址：[https://health-funnel.vercel.app](https://health-funnel.vercel.app)
+- GitHub 仓库：[Brandoo110/health-funnel](https://github.com/Brandoo110/health-funnel)
+- 已支付测试 `sessionId`：`80e14ffa-dd7d-41fc-8406-d43fc2258e5e`
+- 线上 `/api/pay` 验证时间：2026-06-20 22:27 AEST
 
-> Use the stable production alias above for review. Individual Vercel deployment URLs may be protected by Vercel authentication.
+说明：评审请优先使用上面的稳定 Production 地址。单次 Vercel Preview 地址可能受 Vercel 登录保护影响。
 
-## Stack
+## 二、技术栈
 
 - Next.js 16 App Router
+- React 19
 - TypeScript
 - Prisma 7.8
 - Supabase PostgreSQL
 - Zod
 - Vitest
-- GitHub Actions CI with PostgreSQL service
+- GitHub Actions CI
 
-## Run Locally
+## 三、本地启动
 
-Create `.env`:
+先创建 `.env`：
 
 ```bash
 DATABASE_URL="postgresql://..."
 DIRECT_URL="postgresql://..."
 ```
 
-Install and run:
+然后运行：
 
 ```bash
 npm ci
@@ -41,54 +42,58 @@ npx prisma migrate deploy
 npm run dev
 ```
 
-Open:
+本地访问：
 
 ```txt
 http://localhost:3000
 ```
 
-## Test
+## 四、一键测试与 CI
 
-One command:
+一键运行测试：
 
 ```bash
 npm test
 ```
 
-Current local result:
+当前测试结果：
 
 ```txt
 Test Files  4 passed (4)
 Tests       37 passed (37)
 ```
 
-Additional checks:
+补充检查：
 
 ```bash
 npm run lint
 npm run build
 ```
 
-CI:
+CI 文件位于 `.github/workflows/ci.yml`，在 push / pull request 时自动运行：
 
-- `.github/workflows/ci.yml`
-- Runs on push / pull request.
-- Starts a local PostgreSQL service.
-- Runs `npx prisma generate`, `npx prisma migrate deploy`, `npm run lint`, `npm test`, and `npm run build`.
+- 启动 PostgreSQL service
+- `npx prisma generate`
+- `npx prisma migrate deploy`
+- `npm run lint`
+- `npm test`
+- `npm run build`
 
-## API
+## 五、API 文档
 
-### `POST /api/sessions`
+所有接收 `sessionId` 的接口都会先校验 UUID。格式错误返回 `400 bad_request`，格式正确但数据库不存在返回 `404 not_found`。
 
-Create an anonymous session.
+### 1. 创建会话
 
-Request:
+`POST /api/sessions`
+
+请求：
 
 ```json
 {}
 ```
 
-Response:
+响应：
 
 ```json
 {
@@ -97,13 +102,11 @@ Response:
 }
 ```
 
-All APIs that accept `sessionId` validate it as a UUID before database lookup. Malformed IDs return `400 bad_request`; well-formed but unknown UUIDs return `404 not_found`.
+### 2. 保存报告后的姓名 / 邮箱
 
-### `PATCH /api/sessions/lead`
+`PATCH /api/sessions/lead`
 
-Persist lead contact after the report has been generated. This keeps name/email out of the early funnel and saves them only when the user reaches the report gate.
-
-`PATCH /api/sessions` is kept as a backward-compatible alias, but `/api/sessions/lead` is the clearer path for the current frontend.
+这个接口只在报告生成后收集 lead 信息，避免一开始就打断用户填写 funnel。
 
 ```json
 {
@@ -113,7 +116,7 @@ Persist lead contact after the report has been generated. This keeps name/email 
 }
 ```
 
-Response:
+响应：
 
 ```json
 {
@@ -124,11 +127,13 @@ Response:
 }
 ```
 
-### `GET /api/assessment?sessionId=...`
+兼容说明：`PATCH /api/sessions` 仍保留为旧路径别名，当前前端使用语义更清楚的 `/api/sessions/lead`。
 
-Restore saved progress.
+### 3. 恢复测评进度
 
-Response when empty:
+`GET /api/assessment?sessionId=...`
+
+空进度响应：
 
 ```json
 {
@@ -141,9 +146,11 @@ Response when empty:
 }
 ```
 
-### `PATCH /api/assessment`
+### 4. 分步保存测评数据
 
-Incrementally save one step. `version` is optional; when present it enables optimistic concurrency.
+`PATCH /api/assessment`
+
+`version` 可选；传入时用于乐观并发控制，防止旧页面覆盖新数据。
 
 ```json
 {
@@ -158,9 +165,9 @@ Incrementally save one step. `version` is optional; when present it enables opti
 }
 ```
 
-### `POST /api/assessment/submit`
+### 5. 提交测评并生成结果
 
-Submit the completed assessment and persist calculated results.
+`POST /api/assessment/submit`
 
 ```json
 {
@@ -168,11 +175,13 @@ Submit the completed assessment and persist calculated results.
 }
 ```
 
-### `GET /api/results?sessionId=...`
+接口会在服务端计算 BMI、BMI 分类、建议摄入量、目标日期，并把结果写入 `results` 表。
 
-Returns different payloads by `subscriptionStatus`.
+### 6. 查询结果
 
-Free users get a safe preview:
+`GET /api/results?sessionId=...`
+
+非会员只返回安全预览，不返回精确热量、目标日期和完整计划：
 
 ```json
 {
@@ -189,7 +198,7 @@ Free users get a safe preview:
 }
 ```
 
-Paid users get full results:
+已支付会员返回完整结果：
 
 ```json
 {
@@ -208,9 +217,11 @@ Paid users get full results:
 }
 ```
 
-### `POST /api/pay`
+### 7. 模拟支付回调
 
-Simulated payment callback. It sets `users.subscriptionStatus=active` and upserts the active subscription record.
+`POST /api/pay`
+
+这个接口模拟支付成功后的 webhook / callback。它会把 `users.subscriptionStatus` 更新为 `active`，并 upsert `subscriptions` 表中的订阅记录。
 
 ```json
 {
@@ -219,12 +230,14 @@ Simulated payment callback. It sets `users.subscriptionStatus=active` and upsert
 }
 ```
 
-## Replay Full Backend Flow
+## 六、可重放后端流程
+
+下面这段 cURL 可以从创建 session 一直跑到支付解锁。
 
 ```bash
-BASE="http://localhost:3000"
-# Or replay against production:
-# BASE="https://health-funnel.vercel.app"
+BASE="https://health-funnel.vercel.app"
+# 本地调试时可改成：
+# BASE="http://localhost:3000"
 
 SESSION_ID=$(curl -sS -X POST "$BASE/api/sessions" \
   -H "content-type: application/json" \
@@ -259,22 +272,24 @@ curl -sS -X POST "$BASE/api/assessment/submit" \
   -H "content-type: application/json" \
   --data "{\"sessionId\":\"$SESSION_ID\"}"
 
+echo "支付前："
 curl -sS "$BASE/api/results?sessionId=$SESSION_ID"
 
 curl -sS -X POST "$BASE/api/pay" \
   -H "content-type: application/json" \
   --data "{\"sessionId\":\"$SESSION_ID\",\"plan\":\"monthly\"}"
 
+echo "支付后："
 curl -sS "$BASE/api/results?sessionId=$SESSION_ID"
 ```
 
-The paid test session can be inspected directly:
+已支付测试 session 可直接查看：
 
 ```bash
 curl -sS "https://health-funnel.vercel.app/api/results?sessionId=80e14ffa-dd7d-41fc-8406-d43fc2258e5e"
 ```
 
-## Database Schema
+## 七、数据库 Schema 图
 
 ```mermaid
 erDiagram
@@ -337,65 +352,59 @@ erDiagram
   }
 ```
 
-Design notes:
+设计说明：
 
-- `assessments` stores mutable step-by-step input.
-- `results` stores server-calculated output.
-- `subscriptions` stores the current simulated subscription snapshot.
-- `users.subscriptionStatus` is a quick authorization snapshot for result reads.
-- Only metric input is supported: `heightCm` and `weightKg`.
+- `users` 是匿名会话主体，`id` 即前端使用的 `sessionId`。
+- `assessments` 保存分步问卷、进度、完成状态和并发版本。
+- `results` 保存服务端计算结果，避免每次进入结果页都重新计算。
+- `subscriptions` 保存当前模拟订阅快照。
+- `users.subscriptionStatus` 是结果查询时的快速鉴权状态。
+- 当前只支持公制输入：`heightCm` 和 `weightKg`。
 
-## Test Coverage
+## 八、测试覆盖范围
 
-The tests target the scoring rubric directly: data validation, persistence recovery, state consistency, server-side calculation, authorization boundaries, and `/api/pay` state transition. These are the paths where a health funnel backend can silently fail even when the UI looks fine.
+测试目标是证明前三阶段真的成立，而不是只证明页面能点通。
 
-| Requirement | Covered by |
+| 要求 | 覆盖位置 |
 |---|---|
-| Health algorithm unit tests | `lib/health.test.ts` |
-| BMI boundaries | `classifies_bmi_boundaries` |
-| Extreme legal age / height / weight | `accepts_min_max_valid_health_inputs` |
-| Missing health fields | `rejects_missing_runtime_health_fields` |
-| Invalid height / weight / age / target weight | `rejects_invalid_health_inputs` |
-| Unreasonable target BMI | `rejects_unreasonable_target_bmi` |
-| Step save and progress restore | `tests/api/assessment.test.ts` |
-| Interrupted resume | `restores_progress_after_partial_patch` |
-| Repeated submit / same step | `deduplicates_repeated_patch_for_same_step` |
-| Out-of-order patches | `does_not_regress_step_on_out_of_order_patch` |
-| Concurrent stale version | `rejects_stale_concurrent_patch` |
-| Malformed sessionId rejected before DB lookup | `rejects_malformed_session_id_before_database_lookup`, `rejects_malformed_pay_session_id_before_database_lookup`, `rejects_malformed_lead_session_id_before_database_lookup` |
-| Illegal numeric injection | `rejects_numeric_injection_and_null_numeric_values` |
-| Enum / range validation | `rejects_invalid_extended_questionnaire_values` |
-| Missing required fields on submit | `rejects_missing_required_health_fields` |
-| Persist result | `creates_result_for_complete_assessment` |
-| Repeat submit updates same result | `updates_existing_result_on_repeat_submit` |
-| Results before submit | `returns_assessment_not_submitted_before_result_exists` |
-| Free vs paid response | `free_result_response_omits_all_protected_keys`, `unlocks_full_result_after_pay_for_same_session` |
-| Non-member protected fields absent | explicit `not.toHaveProperty` assertions |
-| `/api/pay` state change | `unlocks_full_result_after_pay_for_same_session` |
-| `/api/pay` idempotency | `keeps_pay_idempotent_for_active_session` |
-| Unknown pay UUID session | `returns_404_for_unknown_pay_uuid_session` |
-| Post-generation lead capture | `tests/api/sessions.test.ts` |
-| Semantic lead alias | `persists_lead_contact_through_semantic_lead_alias` |
-| Invalid lead email | `rejects_invalid_lead_email` |
+| 健康算法单元测试 | `lib/health.test.ts` |
+| BMI 分类边界 | `classifies_bmi_boundaries` |
+| 极端合法年龄 / 身高 / 体重 | `accepts_min_max_valid_health_inputs` |
+| 缺失健康字段 | `rejects_missing_runtime_health_fields` |
+| 非法身高 / 体重 / 年龄 / 目标体重 | `rejects_invalid_health_inputs` |
+| 不合理目标 BMI | `rejects_unreasonable_target_bmi` |
+| 分步保存和进度恢复 | `tests/api/assessment.test.ts` |
+| 中断后恢复 | `restores_progress_after_partial_patch` |
+| 重复提交 / 同一步重复保存 | `deduplicates_repeated_patch_for_same_step` |
+| 乱序更新 | `does_not_regress_step_on_out_of_order_patch` |
+| 并发 stale version | `rejects_stale_concurrent_patch` |
+| 非法 sessionId 提前拒绝 | `rejects_malformed_session_id_before_database_lookup` 等 |
+| 非法数值注入 | `rejects_numeric_injection_and_null_numeric_values` |
+| enum / range 校验 | `rejects_invalid_extended_questionnaire_values` |
+| submit 缺必填字段 | `rejects_missing_required_health_fields` |
+| 结果持久化 | `creates_result_for_complete_assessment` |
+| 重复 submit 更新同一份结果 | `updates_existing_result_on_repeat_submit` |
+| 未生成结果时访问结果页 | `returns_assessment_not_submitted_before_result_exists` |
+| 非会员 vs 会员差异化返回 | `free_result_response_omits_all_protected_keys`、`unlocks_full_result_after_pay_for_same_session` |
+| `/api/pay` 状态变化 | `unlocks_full_result_after_pay_for_same_session` |
+| `/api/pay` 幂等 | `keeps_pay_idempotent_for_active_session` |
+| 报告后保存姓名 / 邮箱 | `tests/api/sessions.test.ts` |
+| lead 路径语义 | `persists_lead_contact_through_semantic_lead_alias` |
+| 非法邮箱 | `rejects_invalid_lead_email` |
 
-## Not Covered Yet
+暂未覆盖：
 
-- Full browser e2e is not part of `npm test`; it was validated with Playwright CLI smoke locally.
-- Real payment provider behavior is not covered because `/api/pay` is intentionally a simulated callback.
-- Load / concurrency stress testing against Vercel serverless is not covered; the key `/api/pay` flow was verified once on production.
+- `npm test` 暂未包含完整浏览器 E2E；页面流程已用 Playwright CLI 做过本地 smoke。
+- 真实支付 provider 未覆盖，因为本题实现的是模拟 `/api/pay`。
+- 未做 Vercel serverless 压测；关键 `/api/pay` 线上链路已手动验证。
 
-## AI Collaboration Notes
+## 九、AI 使用复盘
 
-AI was used as an implementation partner, not as an unchecked code generator:
+AI 复盘没有直接塞进 README，单独整理在仓库文件：[AI使用复盘.md](./AI使用复盘.md)。
 
-- Competitive research: inspected the BetterMe funnel network/localStorage flow to understand session creation, step progress, answer payloads, and paywall behavior before designing tables.
-- Database modeling: drafted the four-table model around `users`, `assessments`, `results`, and `subscriptions`, then refined it to keep mutable inputs separate from calculated results.
-- Mock and test data: generated deterministic questionnaire payloads for valid users, incomplete users, stale clients, numeric injection attempts, and paid/free sessions.
-- Core logic: implemented BMI, BMR/TDEE, calorie recommendation, target-date calculation, and plan generation as server-side pure functions plus API integration.
-- Test generation: used AI to enumerate boundary cases, then turned the original Phase 4 requirement into Vitest unit/integration tests.
+复盘里包含：
 
-Rejected / corrected AI example:
-
-- The first implementation did not explicitly re-check the original Phase 4 text; it had good tests, but the README/CI and a few named boundary cases were still under-documented. After re-reading the task file, I added missing runtime-field tests, numeric-injection tests, CI, and a coverage matrix.
-- Another review found `measureSystem` was stored but not actually supported. I removed it instead of pretending imperial units were implemented.
-- The original calorie preview range was too narrow and could be reverse-engineered; it was widened into fixed buckets for safer non-member responses.
+- 如何用 AI 读取并分析 BetterMe 竞品数据流
+- 如何基于竞品做取舍，而不是 1:1 复制
+- 如何用 AI 辅助数据库建模、Mock 数据、健康算法、计划生成和测试用例设计
+- 哪些方案被人工判断后否决或修正，以及原因
