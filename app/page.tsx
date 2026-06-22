@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 
 import { shouldShowFreshStartAction } from "@/lib/landing-state";
+import { buildPriceTiers, getOfferConfig, type OfferKind } from "@/lib/pricing";
 
 type Gender = "male" | "female";
 type Goal = "lose_weight" | "gain_muscle" | "keep_fit" | "get_toned";
@@ -1732,19 +1733,6 @@ function FaqSection({ locked }: { locked: boolean }) {
   );
 }
 
-const priceTiers = [
-  { id: "1week", label: "1-week trial", per: "$1.43 / day", old: "$14.99", now: "$9.99" },
-  {
-    id: "4weeks",
-    label: "4-week plan",
-    per: "$0.71 / day",
-    old: "$39.99",
-    now: "$19.99",
-    popular: true,
-  },
-  { id: "12weeks", label: "12-week plan", per: "$0.42 / day", old: "$89.99", now: "$34.99" },
-];
-
 function PaywallCard({
   busy,
   countdownSeconds,
@@ -1757,6 +1745,9 @@ function PaywallCard({
   onUnlock: () => void;
 }) {
   const [selected, setSelected] = useState("4weeks");
+  const offerKind: OfferKind = offerApplied ? "retention" : "initial";
+  const offer = getOfferConfig(offerKind);
+  const priceTiers = buildPriceTiers(offerKind);
 
   return (
     <section className="paywall-card" aria-label="Payment offer">
@@ -1766,9 +1757,8 @@ function PaywallCard({
       </div>
       <h2>Get your exact calories, goal date and full weekly plan.</h2>
       <p>
-        Your discount is reserved while the timer runs. Everything you previewed above stays
-        available to unlock in full, including the day-by-day schedule, meal ideas and recovery
-        guide.
+        {offer.headline} Everything you previewed above stays available to unlock in full,
+        including the day-by-day schedule, meal ideas and recovery guide.
       </p>
 
       <div className="price-tiers">
@@ -1782,17 +1772,18 @@ function PaywallCard({
             {tier.popular ? <span className="tier-flag">Most popular</span> : null}
             <span className="tier-label">{tier.label}</span>
             <span className="tier-price">
-              <strong>{offerApplied && tier.id === "12weeks" ? "$24.99" : tier.now}</strong>
+              <strong>{tier.now}</strong>
               <em>{tier.old}</em>
             </span>
             <span className="tier-per">{tier.per}</span>
+            <span className="tier-discount">{tier.discountLabel}</span>
             <span className="tier-radio" aria-hidden="true" />
           </button>
         ))}
       </div>
 
       <button className="coral-button" type="button" disabled={busy} onClick={onUnlock}>
-        Get my plan now
+        {offer.cta}
       </button>
 
       <ul className="paywall-trust">
@@ -1865,14 +1856,17 @@ function ExitOfferModal({ onClose, onClaim }: { onClose: () => void; onClaim: ()
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Discount offer">
       <div className="offer-modal">
         <p className="eyebrow">Before you go</p>
-        <h2>Keep the plan for less.</h2>
-        <p>Apply an extra discount to unlock the exact calories, target date and full plan.</p>
+        <h2>Unlock a 50% off exit offer.</h2>
+        <p>
+          Your current plan has 30% off. Apply this one-time 50% discount to unlock the exact
+          calories, target date and full plan for less.
+        </p>
         <div className="modal-actions">
           <button className="text-button" type="button" onClick={onClose}>
             Maybe later
           </button>
           <button className="primary-button" type="button" onClick={onClaim}>
-            Claim discount
+            Apply 50% off
           </button>
         </div>
       </div>

@@ -59,8 +59,8 @@ npm test
 当前测试结果：
 
 ```txt
-Test Files  6 passed (6)
-Tests       42 passed (42)
+Test Files  7 passed (7)
+Tests       44 passed (44)
 ```
 
 补充检查：

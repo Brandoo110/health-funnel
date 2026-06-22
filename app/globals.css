@@ -928,7 +928,7 @@ p {
   grid-template-columns: minmax(0, 1fr) auto 22px;
   grid-template-areas:
     "label price radio"
-    "per   price radio";
+    "per   discount radio";
   align-items: center;
   gap: 2px 12px;
   border: 1.5px solid rgba(255, 255, 255, 0.18);
@@ -995,6 +995,17 @@ p {
   font-size: 12px;
   font-style: normal;
   text-decoration: line-through;
+}
+
+.tier-discount {
+  grid-area: discount;
+  justify-self: end;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(201, 162, 75, 0.18);
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 780;
 }
 
 .tier-radio {
