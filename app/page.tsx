@@ -697,9 +697,7 @@ export default function Home() {
           <p className="wordmark">Better Health Plan</p>
           <div className="result-topbar-right">
             {locked ? (
-              <span className="countdown-pill">
-                <ClockIcon /> {formatCountdown(countdownSeconds)}
-              </span>
+              <DiscountTimer seconds={countdownSeconds} />
             ) : (
               <span className="unlock-pill">
                 <span aria-hidden="true" />
@@ -708,7 +706,7 @@ export default function Home() {
             )}
             {locked ? (
               <button className="topbar-cta" type="button" disabled={busy} onClick={unlockPlan}>
-                Unlock plan
+                Get my plan
               </button>
             ) : (
               <button className="text-button" type="button" onClick={() => setView("funnel")}>
@@ -787,7 +785,7 @@ export default function Home() {
           {locked ? (
             <PaywallCard
               busy={busy}
-              countdown={formatCountdown(countdownSeconds)}
+              countdownSeconds={countdownSeconds}
               offerApplied={offerApplied}
               onUnlock={unlockPlan}
             />
@@ -1749,12 +1747,12 @@ const priceTiers = [
 
 function PaywallCard({
   busy,
-  countdown,
+  countdownSeconds,
   offerApplied,
   onUnlock,
 }: {
   busy: boolean;
-  countdown: string;
+  countdownSeconds: number;
   offerApplied: boolean;
   onUnlock: () => void;
 }) {
@@ -1764,14 +1762,13 @@ function PaywallCard({
     <section className="paywall-card" aria-label="Payment offer">
       <div className="paywall-top">
         <p className="eyebrow">Unlock your full plan</p>
-        <span className="paywall-countdown">
-          <ClockIcon /> {countdown}
-        </span>
+        <DiscountTimer seconds={countdownSeconds} inverted />
       </div>
       <h2>Get your exact calories, goal date and full weekly plan.</h2>
       <p>
-        Everything you previewed above — unlocked in full, plus the day-by-day schedule, complete
-        meal ideas and recovery guide.
+        Your discount is reserved while the timer runs. Everything you previewed above stays
+        available to unlock in full, including the day-by-day schedule, meal ideas and recovery
+        guide.
       </p>
 
       <div className="price-tiers">
@@ -1813,6 +1810,25 @@ function PaywallCard({
         Trusted by 2.2M members · 4.6★ average rating · secured by 256-bit encryption
       </small>
     </section>
+  );
+}
+
+function DiscountTimer({ seconds, inverted = false }: { seconds: number; inverted?: boolean }) {
+  const { minutes, remainingSeconds } = countdownParts(seconds);
+
+  return (
+    <div className={`discount-timer ${inverted ? "inverted" : ""}`} aria-label="Discount countdown">
+      <span className="discount-label">Discount is reserved for:</span>
+      <span className="discount-time">
+        <strong>{minutes}</strong>
+        <small>minutes</small>
+      </span>
+      <span className="discount-separator">:</span>
+      <span className="discount-time">
+        <strong>{remainingSeconds}</strong>
+        <small>seconds</small>
+      </span>
+    </div>
   );
 }
 
@@ -1908,15 +1924,6 @@ function TargetIcon() {
       <circle cx="12" cy="12" r="8" />
       <circle cx="12" cy="12" r="4" />
       <circle cx="12" cy="12" r="0.6" fill="currentColor" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg {...iconProps()}>
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M12 7.5V12l3 2" />
     </svg>
   );
 }
@@ -2235,10 +2242,13 @@ function formatKg(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function formatCountdown(seconds: number) {
+function countdownParts(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+  return {
+    minutes: String(minutes).padStart(2, "0"),
+    remainingSeconds: String(remainingSeconds).padStart(2, "0"),
+  };
 }
 
 function messageFrom(error: unknown) {
