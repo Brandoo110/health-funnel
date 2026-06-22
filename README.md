@@ -59,7 +59,7 @@ Current local result:
 
 ```txt
 Test Files  4 passed (4)
-Tests       33 passed (33)
+Tests       37 passed (37)
 ```
 
 Additional checks:
