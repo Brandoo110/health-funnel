@@ -122,6 +122,7 @@ type Option = {
 };
 
 const sessionStorageKey = "health-funnel-session-id";
+const exitOfferStorageKey = "health-funnel-show-exit-offer";
 
 const initialForm: FormState = {
   gender: "",
@@ -289,6 +290,19 @@ export default function Home() {
     return () => document.removeEventListener("mouseleave", onMouseLeave);
   }, [exitOfferSeen, results?.needPaywall, view]);
 
+  useEffect(() => {
+    if (view !== "results" || !results?.needPaywall || offerApplied) return;
+
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      window.sessionStorage.setItem(exitOfferStorageKey, "1");
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [offerApplied, results?.needPaywall, view]);
+
   const updateField = useCallback(<K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
   }, []);
@@ -303,7 +317,7 @@ export default function Home() {
       if (storedSessionId) {
         try {
           setSessionId(storedSessionId);
-          await restoreAssessment(storedSessionId, false);
+          await restoreAssessment(storedSessionId, false, true);
           setSessionWasRestored(true);
           setStatus("Ready");
           return;
@@ -320,7 +334,7 @@ export default function Home() {
       setSessionId(nextSessionId);
       // 第一次进入时虽然会写 localStorage，但不把它当成“可重新开始”的旧会话。
       setSessionWasRestored(false);
-      await restoreAssessment(nextSessionId, false);
+      await restoreAssessment(nextSessionId, false, false);
       setStatus("Ready");
     } catch (caught) {
       setSessionId(null);
@@ -343,7 +357,11 @@ export default function Home() {
     return body.sessionId;
   }
 
-  async function restoreAssessment(nextSessionId: string, switchView = true) {
+  async function restoreAssessment(
+    nextSessionId: string,
+    switchView = true,
+    restoreCompletedView = switchView,
+  ) {
     const response = await fetch(`/api/assessment?sessionId=${encodeURIComponent(nextSessionId)}`);
     const body = await readBody<AssessmentResponse>(response);
 
@@ -352,7 +370,7 @@ export default function Home() {
     setForm(formFromAssessment(body));
 
     if (body.completed) {
-      await loadResults(nextSessionId, switchView);
+      await loadResults(nextSessionId, restoreCompletedView);
       return;
     }
 
@@ -468,6 +486,12 @@ export default function Home() {
     const body = await readBody<ResultsResponse>(response);
     setResults(body);
     if (switchView) setView("results");
+    const shouldShowExitOffer = window.sessionStorage.getItem(exitOfferStorageKey) === "1";
+    window.sessionStorage.removeItem(exitOfferStorageKey);
+    if (body.needPaywall && shouldShowExitOffer) {
+      setExitOfferSeen(true);
+      setOfferOpen(true);
+    }
   }
 
   async function unlockPlan() {
@@ -486,6 +510,7 @@ export default function Home() {
       await readBody(response);
       await loadResults(sessionId, true);
       setOfferOpen(false);
+      window.sessionStorage.removeItem(exitOfferStorageKey);
       setStatus("Full plan unlocked");
     } catch (caught) {
       setError(messageFrom(caught));
@@ -509,6 +534,7 @@ export default function Home() {
     setLead(initialLead);
     setActiveStep(0);
     setSessionWasRestored(false);
+    window.sessionStorage.removeItem(exitOfferStorageKey);
     setView("funnel");
     void bootstrapSession();
   }
