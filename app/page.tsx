@@ -221,7 +221,7 @@ export default function Home() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [lead, setLead] = useState<LeadState>(initialLead);
   const [results, setResults] = useState<ResultsResponse | null>(null);
-  const [view, setView] = useState<"funnel" | "lead" | "results">("funnel");
+  const [view, setView] = useState<"landing" | "funnel" | "lead" | "results">("landing");
   const [status, setStatus] = useState("Preparing your assessment");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -277,7 +277,7 @@ export default function Home() {
       if (storedSessionId) {
         try {
           setSessionId(storedSessionId);
-          await restoreAssessment(storedSessionId);
+          await restoreAssessment(storedSessionId, false);
           setStatus("Ready");
           return;
         } catch (caught) {
@@ -290,7 +290,7 @@ export default function Home() {
       const nextSessionId = await createSession();
       window.localStorage.setItem(sessionStorageKey, nextSessionId);
       setSessionId(nextSessionId);
-      await restoreAssessment(nextSessionId);
+      await restoreAssessment(nextSessionId, false);
       setStatus("Ready");
     } catch (caught) {
       setSessionId(null);
@@ -312,7 +312,7 @@ export default function Home() {
     return body.sessionId;
   }
 
-  async function restoreAssessment(nextSessionId: string) {
+  async function restoreAssessment(nextSessionId: string, switchView = true) {
     const response = await fetch(`/api/assessment?sessionId=${encodeURIComponent(nextSessionId)}`);
     const body = await readBody<AssessmentResponse>(response);
 
@@ -321,7 +321,7 @@ export default function Home() {
     setForm(formFromAssessment(body));
 
     if (body.completed) {
-      await loadResults(nextSessionId, true);
+      await loadResults(nextSessionId, switchView);
       return;
     }
 
@@ -473,6 +473,11 @@ export default function Home() {
   function resetSetup() {
     window.localStorage.removeItem(sessionStorageKey);
     setError(null);
+    setResults(null);
+    setForm(initialForm);
+    setLead(initialLead);
+    setActiveStep(0);
+    setView("funnel");
     void bootstrapSession();
   }
 
@@ -491,6 +496,56 @@ export default function Home() {
           <button className="primary-button" type="button" disabled={busy} onClick={resetSetup}>
             Retry setup
           </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (view === "landing") {
+    return (
+      <main className="page-frame landing-frame">
+        <section className="landing">
+          <p className="wordmark">Better Health Plan</p>
+          <p className="eyebrow">Personalized in minutes</p>
+          <h1>Build a health plan that fits your body and your week.</h1>
+          <p className="landing-sub">
+            Answer a few quick questions about your goals, body and routine. We calculate your BMI,
+            daily calories and a realistic target date, then build a workout, nutrition and recovery
+            plan around them.
+          </p>
+          <ul className="landing-points">
+            <li>
+              <strong>Personalized</strong>
+              Plan adapts to your goal, pace and weekly schedule.
+            </li>
+            <li>
+              <strong>Science-based</strong>
+              BMI, BMR and TDEE computed on the server, not guessed.
+            </li>
+            <li>
+              <strong>Saved as you go</strong>
+              Every step is stored, so you can pick up where you left off.
+            </li>
+          </ul>
+          <div className="landing-actions">
+            {results ? (
+              <button className="primary-button" type="button" onClick={() => setView("results")}>
+                View my plan
+              </button>
+            ) : (
+              <button
+                className="primary-button"
+                type="button"
+                disabled={busy || !sessionId}
+                onClick={() => setView("funnel")}
+              >
+                {busy ? "Preparing…" : "Start"}
+              </button>
+            )}
+            <button className="text-button" type="button" disabled={busy} onClick={resetSetup}>
+              Start fresh as a new user
+            </button>
+          </div>
         </section>
       </main>
     );

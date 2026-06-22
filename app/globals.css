@@ -139,6 +139,58 @@ p {
   padding: 0 24px 56px;
 }
 
+.landing-frame {
+  align-items: center;
+}
+
+.landing {
+  width: min(100%, 560px);
+  align-self: center;
+}
+
+.landing h1 {
+  margin-bottom: 14px;
+  color: var(--ink);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+
+.landing-sub {
+  margin: 0 0 28px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.62;
+}
+
+.landing-points {
+  margin: 0 0 30px;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-points li {
+  display: grid;
+  gap: 3px;
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.landing-points strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.landing-actions {
+  display: grid;
+  gap: 12px;
+}
+
 .result-hero {
   margin: 40px 0 8px;
 }
